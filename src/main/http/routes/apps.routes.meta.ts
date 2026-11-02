@@ -37,17 +37,18 @@ export const MODULE: RouteModuleMeta = {
       expose: 'ai',
       group: 'digital-human',
       summary: 'List digital humans (and other installed apps) in a space',
-      returns: '{success:true,data:[{id,specId,spaceId,spec,status,userConfig,userOverrides,permissions,installedAt,lastRunAt?,lastRunOutcome?,errorMessage?}]}  — userConfig/spec.mcp_server.env/headers values are redacted to "[redacted]", keys are preserved',
+      returns: '{success:true,data:[{id,specId,spaceId,spec,status,userConfig,userOverrides,effectiveModelSelection?,permissions,installedAt,lastRunAt?,lastRunOutcome?,errorMessage?}]}  — automation apps include the source/model they actually use; userConfig/spec.mcp_server.env/headers values are redacted to "[redacted]", keys are preserved',
       notes: [
         'Optional query: ?spaceId=, ?status=. Without ?status, uninstalled apps are excluded by default.',
         'Omitting ?spaceId= lists every space, which is what the Halo app itself shows — pass $HALO_SPACE_ID to narrow it to the one you are working in. Say which of the two you did, since "how many digital humans do I have" has a different answer for each.',
+        'effectiveModelSelection is resolved, read-only runtime state. inherited=true means the app follows GET /api/agent/model-selection; an empty userOverrides object does not mean it has no model.',
       ].join('\n'),
     },
     'GET /api/apps/:appId': {
       expose: 'ai',
       group: 'digital-human',
       summary: 'Get one installed digital human (or other app) by id',
-      returns: '{success:true,data:InstalledApp|null}  — same shape as GET /api/apps entries, redacted the same way',
+      returns: '{success:true,data:InstalledApp|null}  — same shape as GET /api/apps entries, including effectiveModelSelection for automation apps, redacted the same way',
     },
     // The whole spec arrives as one opaque YAML string, and self-api/redact.ts
     // walks parsed JSON by key — it cannot see inside a serialized blob, so

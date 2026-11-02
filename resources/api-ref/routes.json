@@ -252,6 +252,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/agent/model-selection",
+    "group": "settings"
+  },
+  {
+    "method": "GET",
     "path": "/api/agent/engine-availability",
     "group": "settings"
   },

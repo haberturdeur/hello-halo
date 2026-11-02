@@ -94,6 +94,15 @@ export function registerAgentRoutes(app: Express): void {
     }
   })
 
+  app.get('/api/agent/model-selection', async (_req: Request, res: Response) => {
+    try {
+      const { getEffectiveModelSelection } = await import('../../services/agent/effective-model-selection')
+      res.json({ success: true, data: getEffectiveModelSelection() })
+    } catch (error) {
+      res.json({ success: false, error: (error as Error).message })
+    }
+  })
+
   // Engine availability — mirrors `agent:get-engine-availability` in ipc/agent.ts.
   app.get('/api/agent/engine-availability', async (_req: Request, res: Response) => {
     try {

@@ -1,7 +1,7 @@
 {
-  "totalRoutes": 306,
+  "totalRoutes": 307,
   "expose": {
-    "ai": 194,
+    "ai": 195,
     "wrapped": 11,
     "internal": 101,
     "unlabeled": 0
@@ -13,7 +13,7 @@
     "team": 32,
     "knowledge-base": 22,
     "channels": 22,
-    "settings": 17,
+    "settings": 18,
     "store": 27,
     "terminal": 6
   },

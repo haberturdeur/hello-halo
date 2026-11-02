@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { AISource, BackendRequestConfig } from '../../../../src/shared/types/ai-sources'
 
-const { sourceState, manager } = vi.hoisted(() => {
+const { sourceState, manager, engineState } = vi.hoisted(() => {
   const sourceState = {
     currentId: '',
     sources: new Map<string, AISource>(),
@@ -28,10 +28,13 @@ const { sourceState, manager } = vi.hoisted(() => {
       return backend ? { ...backend, model: modelId ?? backend.model } : null
     }),
   }
-  return { sourceState, manager }
+  return { sourceState, manager, engineState: { capabilities: null as any } }
 })
 
 vi.mock('../../../../src/main/services/ai-sources', () => ({ getAISourceManager: () => manager }))
+vi.mock('../../../../src/main/services/agent/resolved-sdk', () => ({
+  getEngineCapabilities: () => engineState.capabilities,
+}))
 
 // Newly reachable via ai-sources/manager.ts or mcp-manager.ts pulling in
 // analytics.service.ts (which statically imports providers/baidu.ts's
@@ -68,6 +71,7 @@ const ENV_KEYS = ['HALO_OPENAI_API_TYPE', 'HALO_OPENAI_WIRE_API'] as const
 
 beforeEach(() => {
   for (const k of ENV_KEYS) delete process.env[k]
+  engineState.capabilities = null
 })
 afterEach(() => {
   for (const k of ENV_KEYS) delete process.env[k]
@@ -260,6 +264,55 @@ describe('account-specific credential resolution', () => {
     refresh.resolve({ success: true })
     await expect(pending).rejects.toThrow('unavailable')
     expect(manager.getBackendConfigForSource).not.toHaveBeenCalled()
+  })
+})
+
+describe('engine-managed credential resolution', () => {
+  it('does not require a Halo AI source when the active engine manages its own model and login', async () => {
+    sourceState.currentId = ''
+    engineState.capabilities = {
+      engineId: 'cursor',
+      displayName: 'Cursor SDK',
+      modelSelection: {
+        managedBy: 'engine',
+        sourceId: 'engine:cursor',
+        defaultModel: 'auto',
+        models: [{ id: 'auto', name: 'Auto' }, { id: 'composer-2.5', name: 'Composer 2.5' }],
+      },
+    }
+    manager.ensureInitialized.mockClear()
+
+    await expect(getApiCredentialsForSelection(null)).resolves.toMatchObject({
+      baseUrl: '',
+      apiKey: '',
+      model: 'auto',
+      displayModel: 'Auto',
+      provider: 'anthropic',
+    })
+    expect(manager.ensureInitialized).not.toHaveBeenCalled()
+  })
+
+  it('uses a model pinned to the engine virtual source', async () => {
+    engineState.capabilities = {
+      engineId: 'cursor',
+      displayName: 'Cursor SDK',
+      modelSelection: {
+        managedBy: 'engine',
+        sourceId: 'engine:cursor',
+        defaultModel: 'auto',
+        models: [{ id: 'auto', name: 'Auto' }, { id: 'composer-2.5', name: 'Composer 2.5' }],
+      },
+    }
+
+    await expect(getApiCredentialsForSelection({
+      modelSourceId: 'engine:cursor',
+      modelId: 'composer-2.5',
+    })).resolves.toMatchObject({
+      sourceId: 'engine:cursor',
+      model: 'composer-2.5',
+      displayModel: 'Composer 2.5',
+      credentialsGeneration: 'cursor:composer-2.5',
+    })
   })
 })
 

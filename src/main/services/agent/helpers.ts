@@ -26,6 +26,8 @@ import { validateModelCapabilityOverride } from '../../../shared/model-capabilit
 import { isMcpCommandBlocked } from '../security-policy'
 import type { ApiCredentials, ResolvedModelCapabilities } from './types'
 import { assertDelegatedAuthReady } from './cli-auth'
+import { getEngineCapabilities } from './resolved-sdk'
+import { getEffectiveModelSelection } from './effective-model-selection'
 
 // ============================================
 // Headless Electron Path Management
@@ -226,6 +228,9 @@ function resolveCapabilitiesFromSource(
 
 /** Capture the selection once; a token refresh must not redirect it to another account. */
 export async function getApiCredentials(): Promise<ApiCredentials> {
+  const engineManaged = getEngineManagedCredentials()
+  if (engineManaged) return engineManaged
+
   const manager = getAISourceManager()
   await manager.ensureInitialized()
   const source = manager.getCurrentSourceConfig()
@@ -249,6 +254,9 @@ export async function getApiCredentials(): Promise<ApiCredentials> {
 export async function getApiCredentialsForSelection(
   selection: StoredModelSelection | null | undefined
 ): Promise<ApiCredentials> {
+  const engineManaged = getEngineManagedCredentials(selection)
+  if (engineManaged) return engineManaged
+
   const manager = getAISourceManager()
   await manager.ensureInitialized()
   const sourceId = selection?.modelSourceId
@@ -257,6 +265,23 @@ export async function getApiCredentialsForSelection(
     console.warn(`[AgentService] Selected source ${sourceId} no longer exists; using the current source`)
   }
   return getApiCredentials()
+}
+
+function getEngineManagedCredentials(selection?: StoredModelSelection | null): ApiCredentials | null {
+  const capabilities = getEngineCapabilities()
+  const modelSelection = capabilities?.modelSelection
+  if (!modelSelection || modelSelection.managedBy !== 'engine') return null
+  const effective = getEffectiveModelSelection(selection)
+  if (!effective || effective.managedBy !== 'engine') return null
+  return {
+    sourceId: effective.sourceId,
+    baseUrl: '',
+    apiKey: '',
+    model: effective.modelId,
+    displayModel: effective.modelName,
+    provider: 'anthropic',
+    credentialsGeneration: `${capabilities.engineId}:${effective.modelId}`,
+  }
 }
 
 async function resolveSourceCredentials(

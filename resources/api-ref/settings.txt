@@ -18,6 +18,7 @@ not here:
 operations on this page:
   GET    /api/agent/engine-availability                              List which agent engines are installed and which one is active
   GET    /api/agent/engine-capabilities                              Read what the running agent engine can do
+  GET    /api/agent/model-selection                                  Read the effective global AI source and model
   POST   /api/agent/probe-mcp                                        Probe one installed MCP server for connectivity and tools
   POST   /api/agent/test-mcp                                         Test every configured MCP server connection
   POST   /api/ai-sources/set-model                                   Switch the model within the current source
@@ -43,6 +44,11 @@ GET    /api/agent/engine-capabilities                              Read what the
      curl -s "$HALO_API_URL/api/agent/engine-capabilities" -H "Authorization: Bearer $HALO_API_TOKEN"
      # out: {success:true,data:{engineId,displayName,streaming:{text,reasoning,toolInput,toolOutput},tools:{native,synthetic,shellHeuristics},todo:{states,hasActiveForm},subAgent:{...}}}
      # note: Describes the conditions you run under — which streaming and tool features are native versus emulated. Always answers; falls back to the active engine defaults.
+
+GET    /api/agent/model-selection                                  Read the effective global AI source and model
+     curl -s "$HALO_API_URL/api/agent/model-selection" -H "Authorization: Bearer $HALO_API_TOKEN"
+     # out: {success:true,data:{managedBy:"engine"|"source",sourceId,sourceName,modelId,modelName,inherited:true}|null}
+     # note: This is the model new work inherits. Engine-owned sources such as Cursor are runtime state and intentionally do not appear in persisted aiSources from GET /api/config.
 
 POST   /api/agent/probe-mcp                                        Probe one installed MCP server for connectivity and tools
      curl -sX POST "$HALO_API_URL/api/agent/probe-mcp" \

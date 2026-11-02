@@ -6,7 +6,11 @@
  * KB seed) are mocked as an in-memory disk.
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
+
+const { config } = vi.hoisted(() => ({
+  config: { value: undefined as any },
+}))
 
 vi.mock('fs', () => {
   const files = new Map<string, string>()
@@ -47,7 +51,7 @@ vi.mock('../../../src/main/services/tlon', () => ({
 }))
 
 vi.mock('../../../src/main/foundation/config.service', () => ({
-  getConfig: () => undefined,
+  getConfig: () => config.value,
 }))
 
 import {
@@ -57,6 +61,10 @@ import {
 } from '../../../src/main/services/conversation.service'
 
 const SPACE = 'space-1'
+
+beforeEach(() => {
+  config.value = undefined
+})
 
 describe('conversation reasoning effort', () => {
   it('starts at the level passed at creation', () => {
@@ -84,5 +92,17 @@ describe('conversation reasoning effort', () => {
 
     expect(updated?.reasoningEffort).toBe('max')
     expect(updated?.updatedAt).toBe(conv.updatedAt)
+  })
+
+  it('pins new Cursor conversations to the selected engine model', () => {
+    config.value = {
+      agent: { sdkEngine: 'cursor', engineModel: 'composer-2.5' },
+      aiSources: { version: 2, currentId: null, sources: [] },
+    }
+
+    expect(createConversation(SPACE)).toMatchObject({
+      modelSourceId: 'engine:cursor',
+      modelId: 'composer-2.5',
+    })
   })
 })

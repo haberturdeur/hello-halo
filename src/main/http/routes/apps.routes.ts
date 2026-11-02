@@ -53,6 +53,15 @@ import type { EscalationAnswerPayload } from '../../../shared/apps/app-types'
 import { resolveHttpImChat } from '../../../shared/apps/im-keys'
 import { parseTurnReferences, toAppChatRequest } from '../../controllers/chat-turn-input'
 import { getStudioSummary, listPeopleDirectory, getAppCapabilityInventory, getAppSpaceChangePreview, moveAppDefaultSpace, readAppRunMessages, RunProcessClearedError, getDigitalHumanMemoryStatus, consolidateDigitalHumanMemoryNow, listAppReminders, cancelAppReminder, countClearableChats, clearAllChats } from '../../apps/runtime'
+import { getEffectiveModelSelection, withEffectiveModelSelection } from '../../services/agent/effective-model-selection'
+
+function toAppResponse(app: InstalledApp): InstalledApp | (InstalledApp & {
+  effectiveModelSelection: ReturnType<typeof getEffectiveModelSelection>
+}) {
+  return app.spec.type === 'automation'
+    ? withEffectiveModelSelection(app, getEffectiveModelSelection(app.userOverrides))
+    : app
+}
 
 async function respondOperation(res: Response, name: string, operation: () => unknown | Promise<unknown>): Promise<void> {
   try {
@@ -217,7 +226,7 @@ export function registerAppsRoutes(app: Express): void {
         apps = apps.filter(app => app.status !== 'uninstalled')
       }
       console.log('[HTTP] GET /api/apps: count=%d', apps.length)
-      res.json({ success: true, data: apps })
+      res.json({ success: true, data: apps.map(toAppResponse) })
     } catch (error) {
       res.json({ success: false, error: (error as Error).message })
     }
@@ -291,7 +300,7 @@ export function registerAppsRoutes(app: Express): void {
       const manager = getManagerOrFail(res)
       if (!manager) return
       const appData = manager.getApp(appId)
-      res.json({ success: true, data: appData })
+      res.json({ success: true, data: appData ? toAppResponse(appData) : null })
     } catch (error) {
       res.json({ success: false, error: (error as Error).message })
     }

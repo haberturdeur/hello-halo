@@ -157,6 +157,10 @@
   },
   {
     "method": "GET",
+    "path": "/api/agent/model-selection"
+  },
+  {
+    "method": "GET",
     "path": "/api/agent/engine-availability"
   },
   {

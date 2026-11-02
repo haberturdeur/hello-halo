@@ -103,6 +103,14 @@ export const MODULE: RouteModuleMeta = {
         '{success:true,data:{engineId,displayName,streaming:{text,reasoning,toolInput,toolOutput},tools:{native,synthetic,shellHeuristics},todo:{states,hasActiveForm},subAgent:{...}}}',
       notes: 'Describes the conditions you run under — which streaming and tool features are native versus emulated. Always answers; falls back to the active engine defaults.',
     },
+    'GET /api/agent/model-selection': {
+      expose: 'ai',
+      group: 'settings',
+      summary: 'Read the effective global AI source and model',
+      returns:
+        '{success:true,data:{managedBy:"engine"|"source",sourceId,sourceName,modelId,modelName,inherited:true}|null}',
+      notes: 'This is the model new work inherits. Engine-owned sources such as Cursor are runtime state and intentionally do not appear in persisted aiSources from GET /api/config.',
+    },
     'GET /api/agent/engine-availability': {
       expose: 'ai',
       group: 'settings',

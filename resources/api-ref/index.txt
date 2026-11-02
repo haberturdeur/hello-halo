@@ -37,6 +37,7 @@ GET    /api/agent/generating/<conversationId>                      [ai]       co
 POST   /api/agent/test-mcp                                         [ai]       settings                Test every configured MCP server connection
 POST   /api/agent/probe-mcp                                        [ai]       settings                Probe one installed MCP server for connectivity and tools
 GET    /api/agent/engine-capabilities                              [ai]       settings                Read what the running agent engine can do
+GET    /api/agent/model-selection                                  [ai]       settings                Read the effective global AI source and model
 GET    /api/agent/engine-availability                              [ai]       settings                List which agent engines are installed and which one is active
 POST   /api/agent/toolsets/list                                    [ai]       conversation            List the on-demand toolsets available to a conversation
 GET    /api/terminal/list                                          [wrapped]  terminal                List open terminal sessions

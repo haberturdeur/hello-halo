@@ -26,6 +26,7 @@ import { isSpaceConversationId } from '../../shared/apps/im-keys'
 import type { Thought, TranscriptMessage } from '../../shared/types/transcript'
 import { summarizeThoughts } from '../../shared/transcript'
 import { toHaloFileUrl } from '../../shared/halo-file-url'
+import { defaultCapabilitiesFor } from './agent/capabilities'
 
 // Re-export for existing consumers
 export type { FileChangesSummary } from '../../shared/file-changes'
@@ -54,7 +55,7 @@ export interface ConversationMeta {
    * Conversation object by `toMeta()` so the conversation list can render
    * the engine badge without loading the full conversation.
    */
-  engineId?: 'anthropic' | 'halo' | 'codex' | 'dsh' | null
+  engineId?: 'anthropic' | 'halo' | 'codex' | 'dsh' | 'cursor' | null
   /**
    * Set when the title was chosen rather than derived: the user renamed the
    * conversation, or it was created with a title that must stay (a review).
@@ -97,7 +98,7 @@ export interface Conversation extends ConversationMeta {
    * for UI display (EngineBadge) — engine selection at runtime is still
    * process-bound (see resolved-sdk.ts), changing it requires a restart.
    */
-  engineId?: 'anthropic' | 'halo' | 'codex' | 'dsh' | null
+  engineId?: 'anthropic' | 'halo' | 'codex' | 'dsh' | 'cursor' | null
   /**
    * Per-conversation model pin (Cursor-style). Pins this conversation to a
    * specific AI source + model independent of the global "current" selection,
@@ -677,7 +678,7 @@ export function createConversation(
   // Stamp the conversation with the engine that created it. Cheap to read
   // (single config field) and avoids needing a separate IPC call from
   // the renderer when displaying the engine badge.
-  let engineId: 'anthropic' | 'halo' | 'codex' | 'dsh' = 'anthropic'
+  let engineId: 'anthropic' | 'halo' | 'codex' | 'dsh' | 'cursor' = 'anthropic'
   // Stamp the active global model selection so a new conversation inherits the
   // last-used source + model (Cursor-style). Left undefined when no source is
   // configured — the credential resolver falls back to the global selection.
@@ -697,10 +698,14 @@ export function createConversation(
   try {
     const cfg = getConfig()
     const cfgEngine = cfg?.agent?.sdkEngine
-    if (cfgEngine === 'halo' || cfgEngine === 'codex' || cfgEngine === 'dsh') engineId = cfgEngine
+    if (cfgEngine === 'halo' || cfgEngine === 'codex' || cfgEngine === 'dsh' || cfgEngine === 'cursor') engineId = cfgEngine
 
     const aiSources = cfg?.aiSources
-    if (aiSources?.version === 2 && aiSources.currentId) {
+    const engineSelection = defaultCapabilitiesFor(engineId).modelSelection
+    if (engineSelection?.managedBy === 'engine') {
+      modelSourceId = engineSelection.sourceId
+      modelId = cfg?.agent?.engineModel || engineSelection.defaultModel
+    } else if (aiSources?.version === 2 && aiSources.currentId) {
       const currentSource = aiSources.sources.find(s => s.id === aiSources.currentId)
       if (currentSource) {
         modelSourceId = currentSource.id
