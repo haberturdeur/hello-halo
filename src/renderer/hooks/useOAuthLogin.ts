@@ -128,7 +128,7 @@ export function useOAuthLogin({ onSignedIn, onError }: UseOAuthLoginOptions) {
       if (!result.success || !result.data) throw new Error(result.error || t('Failed to start login'))
       const { loginId, loginUrl, state, userCode, verificationUri, redirectUri } = result.data
 
-      if (redirectUri && loginUrl) {
+      if (loginUrl && redirectUri) {
         setLogin({
           provider,
           phase: 'redirect',

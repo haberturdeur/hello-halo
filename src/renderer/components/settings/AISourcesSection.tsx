@@ -433,6 +433,10 @@ export function AISourcesSection({ config, setConfig }: AISourcesSectionProps) {
                 href={verificationUri}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={event => {
+                  event.preventDefault()
+                  void api.openExternal(verificationUri)
+                }}
                 className="text-sm text-primary hover:underline mt-2 block"
               >
                 {t('Open verification page')}

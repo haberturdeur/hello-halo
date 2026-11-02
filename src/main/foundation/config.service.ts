@@ -5,7 +5,7 @@
 import { app } from 'electron'
 import { dirname, join } from 'path'
 import { homedir } from 'os'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { getDataFolderName, getProductFederationGatewayUrl, getServiceDefaults } from './product-config'
 
@@ -53,6 +53,12 @@ import { isCredentialAtRestSafe } from './credential-safety'
 // ============================================================================
 
 const ENCRYPTED_PREFIX = 'enc:'
+const CONFIG_FILE_MODE = 0o600
+
+function writePrivateConfigFile(path: string, contents: string): void {
+  writeFileSync(path, contents, { mode: CONFIG_FILE_MODE })
+  chmodSync(path, CONFIG_FILE_MODE)
+}
 
 interface MigrationResult {
   migrated: boolean
@@ -190,7 +196,7 @@ function migrateEncryptedCredentials(): void {
   // original enc: values on disk for a later recovery attempt.
   if (result.migrated) {
     try {
-      writeFileSync(configPath, JSON.stringify(parsed, null, 2))
+      writePrivateConfigFile(configPath, JSON.stringify(parsed, null, 2))
       if (result.fields.length > 0) {
         console.log(`[Config Migration] Successfully migrated: ${result.fields.join(', ')}`)
       }
@@ -261,7 +267,7 @@ function migrateAiSourcesToV2OnDisk(): void {
   parsed.aiSources = migrated
 
   try {
-    writeFileSync(configPath, JSON.stringify(parsed, null, 2))
+    writePrivateConfigFile(configPath, JSON.stringify(parsed, null, 2))
     console.log('[Config Migration] Persisted v2 aiSources to disk:', {
       sourceCount: migrated.sources.length,
       currentId: migrated.currentId
@@ -334,7 +340,7 @@ function migrateWecomBotToImChannelInstances(): void {
   delete parsed.imChannels.defaultAppId
 
   try {
-    writeFileSync(configPath, JSON.stringify(parsed, null, 2))
+    writePrivateConfigFile(configPath, JSON.stringify(parsed, null, 2))
     console.log('[Config Migration] Migrated wecomBot → imChannels.instances:', {
       instanceId: instance.id,
       appId: instance.appId || '(none)',
@@ -377,7 +383,7 @@ function applyNewToolsetDefaultsOnDisk(): void {
   parsed.toolsetDefaultsSeen = result.seen
 
   try {
-    writeFileSync(configPath, JSON.stringify(parsed, null, 2))
+    writePrivateConfigFile(configPath, JSON.stringify(parsed, null, 2))
     console.log('[Config Migration] Recorded default toolsets:', { seen: result.seen, addedToLastToolsets: added })
   } catch (error) {
     console.error('[Config Migration] Failed to persist default toolsets:', error)
@@ -414,7 +420,7 @@ function upgradeLegacyMaxTurnsOnDisk(): void {
   }
 
   try {
-    writeFileSync(configPath, JSON.stringify(parsed, null, 2))
+    writePrivateConfigFile(configPath, JSON.stringify(parsed, null, 2))
     if (upgraded) {
       console.log(`[Config Migration] Raised legacy maxTurns ${LEGACY_DEFAULT_MAX_TURNS} → ${DEFAULT_MAX_TURNS}`)
     }
@@ -457,7 +463,7 @@ function seedEmailChannelDefaults(): void {
   }
 
   try {
-    writeFileSync(configPath, JSON.stringify(parsed, null, 2))
+    writePrivateConfigFile(configPath, JSON.stringify(parsed, null, 2))
     console.log('[Config Seed] Seeded email channel from product.json:', {
       host: defaults.smtp?.host ?? '(none)',
       port: defaults.smtp?.port ?? '(none)',
@@ -1291,7 +1297,7 @@ export async function initializeApp(): Promise<void> {
   // Create default config if it doesn't exist
   const configPath = getConfigPath()
   if (!existsSync(configPath)) {
-    writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2))
+    writePrivateConfigFile(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2))
   }
 
   // Migrate encrypted credentials to plaintext (v1.2.10 -> v1.2.12+)
@@ -1356,7 +1362,7 @@ export function getConfig(): HaloConfig {
       parsed.copilot = { ...parsed.copilot, identity: parsed.copilotIdentity }
       delete parsed.copilotIdentity
       try {
-        writeFileSync(configPath, JSON.stringify(parsed, null, 2))
+        writePrivateConfigFile(configPath, JSON.stringify(parsed, null, 2))
       } catch { /* non-fatal */ }
     }
 
@@ -1559,7 +1565,7 @@ export function saveConfig(config: HaloConfigPatch): HaloConfig {
   // rename(2) is atomic on POSIX and Windows: a crash mid-write can never
   // leave a truncated/half-encrypted config that would corrupt credentials.
   const tmpPath = `${configPath}.tmp`
-  writeFileSync(tmpPath, JSON.stringify(toWrite, null, 2))
+  writePrivateConfigFile(tmpPath, JSON.stringify(toWrite, null, 2))
   renameSync(tmpPath, configPath)
 
   if (config.api || config.aiSources) {

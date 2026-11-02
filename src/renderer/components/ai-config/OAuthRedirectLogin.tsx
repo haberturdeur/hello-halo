@@ -83,6 +83,10 @@ export function OAuthRedirectLogin({
             href={redirect.loginUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={event => {
+              event.preventDefault()
+              void api.openExternal(redirect.loginUrl)
+            }}
             className="flex-1 min-w-0 p-2.5 bg-muted/50 rounded-md border border-border font-mono text-xs
                      text-muted-foreground break-all select-all overflow-hidden max-h-16 overflow-y-auto"
           >

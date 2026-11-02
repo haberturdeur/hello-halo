@@ -14,11 +14,10 @@
  * Deliberate divergences are called out inline.
  *
  * Flow:
- * 1. startLogin() — PKCE S256, bind the loopback callback the CLI uses
- *    (127.0.0.1:1455, falling back to 1457), open the system browser.
- * 2. The user signs in; ChatGPT redirects to the loopback listener with `code`.
- * 3. completeLogin() — exchange the code for tokens, read the account id out of
- *    the id_token, hand the tokens to the manager.
+ * 1. startLogin() — request a one-time device code from OpenAI.
+ * 2. The user opens the verification page on any device and enters the code.
+ * 3. completeLogin() — poll for OpenAI's authorization code and PKCE material,
+ *    exchange it for tokens, then hand the tokens to the manager.
  * 4. getBackendConfig() — route to the Codex Responses endpoint with the bearer
  *    token, plus the provider adapter that reshapes the body for this backend.
  *
@@ -27,10 +26,7 @@
  * and only Halo's own sources are. Nothing here touches CODEX_HOME.
  */
 
-import http from 'http'
 import { readFileSync } from 'fs'
-import { createHash, randomBytes } from 'crypto'
-import open from 'open'
 import { proxyFetch } from '../../proxy-fetch'
 import type {
   OAuthAISourceProvider,
@@ -61,29 +57,18 @@ import {
 
 /** OAuth issuer. `codex-rs/login/src/server.rs` DEFAULT_ISSUER. */
 const ISSUER = 'https://auth.openai.com'
-const AUTHORIZE_URL = `${ISSUER}/oauth/authorize`
 const TOKEN_URL = `${ISSUER}/oauth/token`
 const REVOKE_URL = `${ISSUER}/oauth/revoke`
+const DEVICE_CODE_URL = `${ISSUER}/api/accounts/deviceauth/usercode`
+const DEVICE_TOKEN_URL = `${ISSUER}/api/accounts/deviceauth/token`
+const DEVICE_VERIFICATION_URL = `${ISSUER}/codex/device`
+const DEVICE_REDIRECT_URI = `${ISSUER}/deviceauth/callback`
 
 /** Public client id of the Codex CLI. `codex-rs/login/src/auth/manager.rs` CLIENT_ID. */
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 
-/**
- * Authorize scopes. The two `api.connectors.*` entries govern server-side
- * connector invocation; dropping them is a documented cause of tool-calling
- * failures on this backend, so they must stay.
- * `codex-rs/login/src/server.rs` build_authorize_url.
- */
-const SCOPE = 'openid profile email offline_access api.connectors.read api.connectors.invoke'
-
 /** Client identity the backend keys on. `codex-rs/login/src/auth/default_client.rs`. */
 const ORIGINATOR = 'codex_cli_rs'
-
-/** Loopback callback the CLI binds, and its single fallback port. */
-const CALLBACK_HOST = '127.0.0.1'
-const CALLBACK_PATH = '/auth/callback'
-const DEFAULT_CALLBACK_PORT = 1455
-const FALLBACK_CALLBACK_PORT = 1457
 
 /** Codex Responses endpoint for subscription auth. */
 const RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'
@@ -102,8 +87,9 @@ const JWT_PROFILE_PATH = 'https://api.openai.com/profile'
 /** Refresh once the access token is within this window of expiring. */
 const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000
 
-/** How long to wait for the user to finish signing in in the browser. */
-const AUTHORIZE_TIMEOUT_MS = 5 * 60 * 1000
+/** Codex's device authorization window. Halo's manager may cancel it sooner. */
+const AUTHORIZE_TIMEOUT_MS = 15 * 60 * 1000
+const AUTH_REQUEST_TIMEOUT_MS = 30_000
 
 /** Upper bound on a catalog read, which also happens inside the login flow. */
 const CATALOG_TIMEOUT_MS = 15_000
@@ -113,39 +99,17 @@ const CATALOG_TIMEOUT_MS = 15_000
 // ============================================================================
 
 interface PendingAuth {
-  /** PKCE code_verifier — needed at token exchange. */
-  verifier: string
-  /** CSRF state echoed back on the loopback redirect. */
-  state: string
-  redirectUri: string
-  /** Running loopback callback server, closed when the flow settles. */
-  server: http.Server
-  resolveCode: (code: string) => void
-  rejectCode: (err: Error) => void
-  /** Awaited by completeLogin. */
-  codePromise: Promise<string>
-  createdAt: number
+  deviceAuthId: string
+  userCode: string
+  intervalMs: number
+  expiresAt: number
 }
 
 let pendingAuth: PendingAuth | null = null
 
 // ============================================================================
-// PKCE / JWT helpers
+// JWT helpers
 // ============================================================================
-
-function base64Url(buffer: Buffer): string {
-  return buffer.toString('base64url')
-}
-
-/**
- * PKCE S256 pair. The verifier is 64 random bytes, matching the CLI
- * (`codex-rs/login/src/pkce.rs`) — not the 32 the RFC minimum would allow.
- */
-function createPkce(): { verifier: string; challenge: string } {
-  const verifier = base64Url(randomBytes(64))
-  const challenge = base64Url(createHash('sha256').update(verifier).digest())
-  return { verifier, challenge }
-}
 
 /** Decode a JWT payload without verifying it — we only read our own claims. */
 function decodeJwtPayload(token: string | undefined): Record<string, unknown> | null {
@@ -670,75 +634,57 @@ class ChatGPTProvider implements OAuthAISourceProvider {
 
   // ── OAuth flow ──────────────────────────────────────────────────────────────
 
-  /**
-   * Bind the loopback callback and open the browser.
-   *
-   * Returns neither `userCode` nor `redirectUri`: the loopback server owns the
-   * callback, so the renderer takes the generic start → complete path and
-   * completeLogin blocks until the redirect arrives. That also keeps the
-   * Claude-specific PKCE dialog out of the picture entirely.
-   */
+  /** Request the proprietary Codex device code used by the official CLI. */
   async startLogin(): Promise<ProviderResult<OAuthStartResult>> {
     try {
       this.cleanupPending()
 
-      const pkce = createPkce()
-      // Independent CSRF state (RFC 6749 §10.12) — never derived from the verifier.
-      const state = base64Url(randomBytes(32))
-
-      let resolveCode!: (code: string) => void
-      let rejectCode!: (err: Error) => void
-      const codePromise = new Promise<string>((resolve, reject) => {
-        resolveCode = resolve
-        rejectCode = reject
+      const response = await proxyFetch(DEVICE_CODE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: CLIENT_ID }),
+        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS)
       })
-      // A pending promise with no synchronous consumer would raise an
-      // unhandledRejection if the server errors before completeLogin awaits it.
-      codePromise.catch(() => {})
 
-      const server = http.createServer()
-      const port = await this.bindCallbackServer(server)
-      const redirectUri = `http://localhost:${port}${CALLBACK_PATH}`
-
-      server.on('request', (req, res) => {
-        this.handleLoopbackRequest(req, res, state)
-      })
-      // Guard against the user abandoning the browser tab.
-      server.setTimeout(AUTHORIZE_TIMEOUT_MS)
-
-      const url = new URL(AUTHORIZE_URL)
-      url.searchParams.set('response_type', 'code')
-      url.searchParams.set('client_id', CLIENT_ID)
-      url.searchParams.set('redirect_uri', redirectUri)
-      url.searchParams.set('scope', SCOPE)
-      url.searchParams.set('code_challenge', pkce.challenge)
-      url.searchParams.set('code_challenge_method', 'S256')
-      url.searchParams.set('id_token_add_organizations', 'true')
-      url.searchParams.set('codex_cli_simplified_flow', 'true')
-      url.searchParams.set('state', state)
-      url.searchParams.set('originator', ORIGINATOR)
-      const loginUrl = url.toString()
-
-      pendingAuth = {
-        verifier: pkce.verifier,
-        state,
-        redirectUri,
-        server,
-        resolveCode,
-        rejectCode,
-        codePromise,
-        createdAt: Date.now()
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Device code login is not enabled for this ChatGPT account or workspace')
+        }
+        throw new Error(`Device code request failed: ${response.status}`)
       }
 
-      console.log('[ChatGPT] Login started, loopback callback on', redirectUri)
+      const data = await response.json() as {
+        device_auth_id?: unknown
+        user_code?: unknown
+        usercode?: unknown
+        interval?: unknown
+      }
+      const deviceAuthId = typeof data.device_auth_id === 'string' ? data.device_auth_id.trim() : ''
+      const rawUserCode = data.user_code ?? data.usercode
+      const userCode = typeof rawUserCode === 'string' ? rawUserCode.trim() : ''
+      const interval = typeof data.interval === 'string' || typeof data.interval === 'number'
+        ? Number(data.interval) : NaN
+      if (!deviceAuthId || !userCode || !Number.isFinite(interval) || interval <= 0) {
+        throw new Error('Invalid device code response')
+      }
 
-      // Failure is non-fatal: the flow still completes if the user opens the
-      // authorize URL in any other browser, since the callback is a local socket.
-      open(loginUrl).catch((err) => {
-        console.warn('[ChatGPT] Failed to open system browser:', err)
-      })
+      pendingAuth = {
+        deviceAuthId,
+        userCode,
+        intervalMs: interval * 1000,
+        expiresAt: Date.now() + AUTHORIZE_TIMEOUT_MS
+      }
+      console.log('[ChatGPT] Device code login started')
 
-      return { success: true, data: { loginUrl, state } }
+      return {
+        success: true,
+        data: {
+          loginUrl: DEVICE_VERIFICATION_URL,
+          state: userCode,
+          userCode,
+          verificationUri: DEVICE_VERIFICATION_URL
+        }
+      }
     } catch (error) {
       console.error('[ChatGPT] Start login error:', error)
       this.cleanupPending()
@@ -749,22 +695,18 @@ class ChatGPTProvider implements OAuthAISourceProvider {
     }
   }
 
-  /** Wait for the loopback code, exchange it, and hand the tokens to the manager. */
+  /** Poll OpenAI until the user enters the device code, then exchange the issued code. */
   async completeLogin(state: string): Promise<ProviderResult<OAuthCompleteResult>> {
     const pending = pendingAuth
-    if (!pending) {
-      return { success: false, error: 'No pending authentication' }
-    }
-    if (pending.state !== state) {
-      return { success: false, error: 'Authentication state mismatch' }
+    if (!pending || state !== pending.userCode) {
+      return { success: false, error: 'No pending authentication or state mismatch' }
     }
 
     try {
-      console.log('[ChatGPT] Waiting for browser authorization...')
-      const code = await this.awaitAuthorizationCode(pending)
-
+      console.log('[ChatGPT] Waiting for device authorization...')
+      const authorization = await this.pollDeviceAuthorization(pending)
       console.log('[ChatGPT] Exchanging authorization code for tokens')
-      const tokens = await this.exchangeCode(code, pending)
+      const tokens = await this.exchangeCode(authorization.authorizationCode, authorization.codeVerifier)
       if (pendingAuth !== pending) throw new Error('Authorization cancelled')
 
       const accountId = readAccountId(tokens.idToken, tokens.accessToken)
@@ -957,93 +899,47 @@ class ChatGPTProvider implements OAuthAISourceProvider {
 
   // ── Internals ────────────────────────────────────────────────────────────────
 
-  /**
-   * Bind the CLI's port, falling back to its single alternate. Anything other
-   * than `EADDRINUSE` is a real failure and propagates.
-   */
-  private async bindCallbackServer(server: http.Server): Promise<number> {
-    for (const port of [DEFAULT_CALLBACK_PORT, FALLBACK_CALLBACK_PORT]) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const onError = (err: Error) => {
-            server.removeListener('listening', onListening)
-            reject(err)
-          }
-          const onListening = () => {
-            server.removeListener('error', onError)
-            resolve()
-          }
-          server.once('error', onError)
-          server.once('listening', onListening)
-          server.listen(port, CALLBACK_HOST)
-        })
-        return port
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
-        console.warn(`[ChatGPT] Callback port ${port} in use, trying the fallback`)
-      }
-    }
-    throw new Error(`Failed to bind ${CALLBACK_HOST}:${DEFAULT_CALLBACK_PORT} or ${FALLBACK_CALLBACK_PORT}`)
-  }
+  /** OpenAI uses 403/404 as "still pending" for this Codex-specific flow. */
+  private async pollDeviceAuthorization(pending: PendingAuth): Promise<{
+    authorizationCode: string
+    codeVerifier: string
+  }> {
+    while (Date.now() < pending.expiresAt) {
+      if (pendingAuth !== pending) throw new Error('Authorization cancelled')
+      const response = await proxyFetch(DEVICE_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_auth_id: pending.deviceAuthId,
+          user_code: pending.userCode
+        }),
+        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS)
+      })
+      if (pendingAuth !== pending) throw new Error('Authorization cancelled')
 
-  /** Wait for the loopback callback code, bounded by the authorize timeout. */
-  private awaitAuthorizationCode(pending: PendingAuth): Promise<string> {
-    const remaining = Math.max(0, AUTHORIZE_TIMEOUT_MS - (Date.now() - pending.createdAt))
-    return new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Authorization timed out')), remaining)
-      pending.codePromise.then(
-        (code) => {
-          clearTimeout(timer)
-          resolve(code)
-        },
-        (err) => {
-          clearTimeout(timer)
-          reject(err)
+      if (response.ok) {
+        const data = await response.json() as {
+          authorization_code?: unknown
+          code_challenge?: unknown
+          code_verifier?: unknown
         }
-      )
-    })
-  }
-
-  /** Loopback callback: validate `state`, settle the pending flow with `code`. */
-  private handleLoopbackRequest(req: http.IncomingMessage, res: http.ServerResponse, expectedState: string): void {
-    let code = ''
-    let stateParam = ''
-    let errParam = ''
-    try {
-      const parsed = new URL(req.url || '', `http://${CALLBACK_HOST}`)
-      if (parsed.pathname !== CALLBACK_PATH) {
-        res.statusCode = 404
-        res.end('Not Found')
-        return
+        const authorizationCode = typeof data.authorization_code === 'string' ? data.authorization_code : ''
+        const codeChallenge = typeof data.code_challenge === 'string' ? data.code_challenge : ''
+        const codeVerifier = typeof data.code_verifier === 'string' ? data.code_verifier : ''
+        if (!authorizationCode || !codeChallenge || !codeVerifier) {
+          throw new Error('Invalid device authorization response')
+        }
+        return { authorizationCode, codeVerifier }
       }
-      code = (parsed.searchParams.get('code') || '').trim()
-      stateParam = (parsed.searchParams.get('state') || '').trim()
-      errParam = (parsed.searchParams.get('error_description') || parsed.searchParams.get('error') || '').trim()
-    } catch {
-      // fall through to the failure branch below
-    }
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    res.end(
-      '<!doctype html><html lang="en"><head><meta charset="utf-8" />' +
-      '<title>Login complete</title></head><body style="font-family:system-ui,sans-serif;padding:40px;text-align:center">' +
-      '<h1 style="font-size:1.25rem">Login complete</h1><p>You can return to Halo now.</p></body></html>'
-    )
-
-    const pending = pendingAuth
-    if (!pending || pending.state !== expectedState) {
-      console.warn('[ChatGPT] Authorization callback discarded: no matching pending login')
-      return
+      if (response.status !== 403 && response.status !== 404) {
+        throw new Error(`Device authorization failed: ${response.status}`)
+      }
+      const remaining = pending.expiresAt - Date.now()
+      if (remaining <= 0) break
+      await new Promise(resolve => setTimeout(resolve, Math.min(pending.intervalMs, remaining)))
     }
-    if (errParam) {
-      pending.rejectCode(new Error(`Authorization failed: ${errParam}`))
-      return
-    }
-    if (!code || stateParam !== expectedState) {
-      pending.rejectCode(new Error('Authorization callback missing code or state mismatch'))
-      return
-    }
-    pending.resolveCode(code)
+    throw new Error('Device authorization timed out')
   }
 
   /**
@@ -1052,13 +948,13 @@ class ChatGPTProvider implements OAuthAISourceProvider {
    * Form-encoded (not JSON) and with exactly these five fields — the CLI sends
    * no more, and an extra field is a fingerprint deviation.
    */
-  private async exchangeCode(code: string, pending: PendingAuth): Promise<TokenSet> {
+  private async exchangeCode(code: string, codeVerifier: string): Promise<TokenSet> {
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: pending.redirectUri,
+      redirect_uri: DEVICE_REDIRECT_URI,
       client_id: CLIENT_ID,
-      code_verifier: pending.verifier
+      code_verifier: codeVerifier
     })
 
     const response = await proxyFetch(TOKEN_URL, {
@@ -1090,12 +986,10 @@ class ChatGPTProvider implements OAuthAISourceProvider {
     }
   }
 
-  /** Release the loopback server and clear pending state. Idempotent. */
+  /** Clear the single pending device authorization. Idempotent. */
   private cleanupPending(expected = pendingAuth): void {
     if (!expected || pendingAuth !== expected) return
     pendingAuth = null
-    expected.rejectCode(new Error('Authorization cancelled'))
-    expected.server.close()
   }
 }
 

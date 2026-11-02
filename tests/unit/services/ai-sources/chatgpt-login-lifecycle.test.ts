@@ -1,18 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { servers, proxyFetch } = vi.hoisted(() => ({ servers: [] as any[], proxyFetch: vi.fn() }))
-vi.mock('http', async () => {
-  const { EventEmitter } = await import('events')
-  return { default: { createServer: () => {
-    const server = Object.assign(new EventEmitter(), {
-      listen: vi.fn(() => { queueMicrotask(() => server.emit('listening')) }),
-      close: vi.fn(), setTimeout: vi.fn()
-    })
-    servers.push(server)
-    return server
-  } } }
-})
-vi.mock('open', () => ({ default: vi.fn(async () => undefined) }))
+const { proxyFetch } = vi.hoisted(() => ({ proxyFetch: vi.fn() }))
 vi.mock('../../../../src/main/services/proxy-fetch', () => ({ proxyFetch }))
 
 import { ChatGPTProvider } from '../../../../src/main/services/ai-sources/providers/chatgpt.provider'
@@ -22,14 +10,18 @@ const tokens = (userId = 'user-a', accountId = 'account-a') => ({
   access_token: jwt({ exp: 9999999999, 'https://api.openai.com/auth': { chatgpt_account_id: accountId, chatgpt_user_id: userId } }),
   id_token: jwt({ email: 'a@example.com' }), refresh_token: 'fake-refresh'
 })
-function callback(server: any, state: string, path = '/auth/callback') {
-  const res = { statusCode: 200, setHeader: vi.fn(), end: vi.fn() }
-  server.emit('request', { url: `${path}?code=code&state=${state}` }, res)
-  return res
-}
+const deviceCode = (suffix = 'a') => ({
+  device_auth_id: `device-${suffix}`,
+  user_code: `CODE-${suffix.toUpperCase()}`,
+  interval: '5'
+})
+const authorization = () => ({
+  authorization_code: 'authorization-code',
+  code_challenge: 'server-generated-challenge',
+  code_verifier: 'server-generated-verifier'
+})
 
 beforeEach(() => {
-  servers.length = 0
   vi.clearAllMocks()
   process.getSystemVersion = () => '15.1'
 })
@@ -38,34 +30,65 @@ afterEach(async () => {
 })
 
 describe('ChatGPT authorization ownership', () => {
-  async function authorize(userId: string, accountId: string) {
+  async function authorize(userId: string, accountId: string, suffix: string) {
     const provider = new ChatGPTProvider()
+    proxyFetch.mockResolvedValueOnce(new Response(JSON.stringify(deviceCode(suffix))))
     const start = await provider.startLogin()
-    const completion = provider.completeLogin(start.data!.state)
-    proxyFetch.mockResolvedValueOnce(new Response(JSON.stringify(tokens(userId, accountId))))
+    proxyFetch.mockResolvedValueOnce(new Response(JSON.stringify(authorization())))
+      .mockResolvedValueOnce(new Response(JSON.stringify(tokens(userId, accountId))))
       .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ slug: 'account-model' }] })))
-    callback(servers.at(-1), start.data!.state)
-    return completion
+    return provider.completeLogin(start.data!.state)
   }
 
   it('distinguishes users in the same workspace while routing catalogs to that workspace', async () => {
-    const first = await authorize('user-a', 'shared-workspace')
-    const second = await authorize('user-b', 'shared-workspace')
+    const first = await authorize('user-a', 'shared-workspace', 'a')
+    const second = await authorize('user-b', 'shared-workspace', 'b')
     expect(first.data?.user?.uid).toBe(JSON.stringify(['user-a', 'shared-workspace']))
     expect(second.data?.user?.uid).toBe(JSON.stringify(['user-b', 'shared-workspace']))
     expect((first.data as any)._accountId).toBe('shared-workspace')
-    expect(proxyFetch.mock.calls[1][1].headers['ChatGPT-Account-ID']).toBe('shared-workspace')
     expect(proxyFetch.mock.calls[3][1].headers['ChatGPT-Account-ID']).toBe('shared-workspace')
+    expect(proxyFetch.mock.calls[7][1].headers['ChatGPT-Account-ID']).toBe('shared-workspace')
   })
 
   it('keeps distinct workspaces independent and never treats a workspace-only claim as user identity', async () => {
-    const first = await authorize('same-user', 'workspace-a')
-    const second = await authorize('same-user', 'workspace-b')
-    const unknown = await authorize('', 'workspace-a')
+    const first = await authorize('same-user', 'workspace-a', 'a')
+    const second = await authorize('same-user', 'workspace-b', 'b')
+    const unknown = await authorize('', 'workspace-a', 'c')
     expect(first.data?.user?.uid).not.toBe(second.data?.user?.uid)
     expect(unknown.success).toBe(true)
     expect(unknown.data?.user?.uid).toBe('')
     expect((unknown.data as any)._accountId).toBe('workspace-a')
+  })
+
+  it('uses the official headless device flow and exchanges OpenAI-supplied PKCE material', async () => {
+    const provider = new ChatGPTProvider()
+    proxyFetch.mockResolvedValueOnce(new Response(JSON.stringify(deviceCode())))
+    const start = await provider.startLogin()
+    expect(start.data).toMatchObject({
+      loginUrl: 'https://auth.openai.com/codex/device',
+      state: 'CODE-A',
+      userCode: 'CODE-A',
+      verificationUri: 'https://auth.openai.com/codex/device'
+    })
+    expect(JSON.parse(proxyFetch.mock.calls[0][1].body)).toEqual({
+      client_id: 'app_EMoamEEZ73f0CkXaXp7hrann'
+    })
+
+    proxyFetch.mockResolvedValueOnce(new Response(JSON.stringify(authorization())))
+      .mockResolvedValueOnce(new Response(JSON.stringify(tokens())))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ slug: 'account-model' }] })))
+    const completion = await provider.completeLogin(start.data!.state)
+    expect(completion.success).toBe(true)
+    expect(JSON.parse(proxyFetch.mock.calls[1][1].body)).toEqual({
+      device_auth_id: 'device-a', user_code: 'CODE-A'
+    })
+    expect(new URLSearchParams(proxyFetch.mock.calls[2][1].body)).toEqual(new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: 'authorization-code',
+      redirect_uri: 'https://auth.openai.com/deviceauth/callback',
+      client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+      code_verifier: 'server-generated-verifier'
+    }))
   })
 
   it('verifies legacy identity from the stored access token, not email or workspace alone', () => {
@@ -82,50 +105,14 @@ describe('ChatGPT authorization ownership', () => {
     }) } } as any)).toBe(JSON.stringify(['legacy-user', 'workspace']))
   })
 
-  it('keeps a pending login alive when another account logs out', async () => {
+  it('rejects mismatched state without polling and cancellation prevents completion', async () => {
     const provider = new ChatGPTProvider()
+    proxyFetch.mockResolvedValueOnce(new Response(JSON.stringify(deviceCode())))
     const start = await provider.startLogin()
-    const completion = provider.completeLogin(start.data!.state)
-    proxyFetch.mockResolvedValueOnce(new Response('{}'))
-    await provider.logout({ chatgpt: { refreshToken: 'other-account-refresh' } } as any)
-    expect(servers[0].close).not.toHaveBeenCalled()
-    proxyFetch.mockResolvedValueOnce(new Response(JSON.stringify(tokens())))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ slug: 'account-model' }] })))
-    callback(servers[0], start.data!.state)
-    expect((await completion).success).toBe(true)
-    expect(servers[0].close).toHaveBeenCalledTimes(1)
-  })
-
-  it('a late callback from a canceled server cannot settle a newer authorization', async () => {
-    const provider = new ChatGPTProvider()
-    const first = await provider.startLogin()
-    const old = provider.completeLogin(first.data!.state)
-    await provider.cancelLogin()
-    expect((await old).success).toBe(false)
-    const second = await provider.startLogin()
-    const current = provider.completeLogin(second.data!.state)
-    callback(servers[0], first.data!.state)
-    expect(proxyFetch).not.toHaveBeenCalled()
-    proxyFetch.mockResolvedValueOnce(new Response(JSON.stringify(tokens())))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ slug: 'account-model' }] })))
-    callback(servers[1], second.data!.state)
-    expect((await current).success).toBe(true)
-  })
-
-  it('rejects a callback path prefix and stops a canceled exchange before catalog fetching', async () => {
-    const provider = new ChatGPTProvider()
-    const start = await provider.startLogin()
-    const completion = provider.completeLogin(start.data!.state)
-    expect(callback(servers[0], start.data!.state, '/auth/callback/extra').statusCode).toBe(404)
-    expect(proxyFetch).not.toHaveBeenCalled()
-    let resolve!: (response: Response) => void
-    proxyFetch.mockReturnValueOnce(new Promise<Response>(done => { resolve = done }))
-    callback(servers[0], start.data!.state)
-    await vi.waitFor(() => expect(proxyFetch).toHaveBeenCalledTimes(1))
-    await provider.cancelLogin()
-    resolve(new Response(JSON.stringify(tokens())))
-    expect((await completion).success).toBe(false)
+    expect((await provider.completeLogin('WRONG-CODE')).success).toBe(false)
     expect(proxyFetch).toHaveBeenCalledTimes(1)
-    expect(servers[0].close).toHaveBeenCalledTimes(1)
+    await provider.cancelLogin()
+    expect((await provider.completeLogin(start.data!.state)).success).toBe(false)
+    expect(proxyFetch).toHaveBeenCalledTimes(1)
   })
 })

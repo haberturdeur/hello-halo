@@ -11,6 +11,9 @@
 import { create } from 'zustand'
 import { setActiveServerUrl, setAuthToken } from '../api/transport'
 
+declare const __HALO_DEFAULT_SERVER_URL__: string | undefined
+declare const __HALO_DEFAULT_SERVER_TOKEN__: string | undefined
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -58,6 +61,26 @@ export interface ServerStore {
 
 const STORAGE_KEY = 'halo_servers'
 const ACTIVE_KEY = 'halo_active_server'
+const EMBEDDED_SERVER_ID = 'build-default'
+
+/**
+ * Private APK builds may carry a one-time bootstrap server. The values come
+ * from vite.config.mobile.ts build environment variables, never tracked source.
+ * A user who removes the entry gets a persisted [] and it is not recreated.
+ */
+function embeddedDefaultServer(): ServerEntry | null {
+  const url = typeof __HALO_DEFAULT_SERVER_URL__ === 'string'
+    ? __HALO_DEFAULT_SERVER_URL__.replace(/\/+$/, '')
+    : ''
+  const token = typeof __HALO_DEFAULT_SERVER_TOKEN__ === 'string'
+    ? __HALO_DEFAULT_SERVER_TOKEN__
+    : ''
+  if (!url || !token) return null
+
+  let name = 'Halo'
+  try { name = new URL(url).hostname } catch { /* build input is validated by connection flow */ }
+  return { id: EMBEDDED_SERVER_ID, name, url, token, addedAt: 0 }
+}
 
 // ---------------------------------------------------------------------------
 // Persistence helpers
@@ -82,7 +105,10 @@ function persistActiveId(id: string | null): void {
 function loadServers(): ServerEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
+    if (!raw) {
+      const embedded = embeddedDefaultServer()
+      return embedded ? [embedded] : []
+    }
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed : []
   } catch {
@@ -92,7 +118,7 @@ function loadServers(): ServerEntry[] {
 
 function loadActiveId(): string | null {
   try {
-    return localStorage.getItem(ACTIVE_KEY)
+    return localStorage.getItem(ACTIVE_KEY) ?? (embeddedDefaultServer() ? EMBEDDED_SERVER_ID : null)
   } catch {
     return null
   }

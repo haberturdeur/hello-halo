@@ -9,6 +9,11 @@
     "owner": "openkursar",
     "repo": "hello-halo"
   },
+  "security": {
+    "credentialAtRestSafe": true,
+    "remoteMcpSafe": true,
+    "tunnelSafe": true
+  },
   "authProviders": [
     {
       "type": "claude",
@@ -23,6 +28,23 @@
       },
       "icon": "log-in",
       "iconBgColor": "#D97757",
+      "builtin": true,
+      "enabled": true
+    },
+
+    {
+      "type": "chatgpt",
+      "displayName": {
+        "en": "ChatGPT",
+        "zh-CN": "ChatGPT"
+      },
+      "recommended": false,
+      "description": {
+        "en": "ChatGPT Plus/Pro/Business, sign in with your ChatGPT account",
+        "zh-CN": "ChatGPT Plus/Pro/Business，使用 ChatGPT 账号登录"
+      },
+      "icon": "openai",
+      "iconBgColor": "#10A37F",
       "builtin": true,
       "enabled": true
     },

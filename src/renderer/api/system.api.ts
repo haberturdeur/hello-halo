@@ -4,8 +4,10 @@
  */
 import {
   httpRequest,
+  isCapacitor,
   isElectron,
 } from './_shared'
+import { Browser } from '@capacitor/browser'
 import type {
   ApiResponse,
 } from './_shared'
@@ -166,6 +168,10 @@ export const systemApi = {
   },
 
   openExternal: async (url: string): Promise<void> => {
+    if (isCapacitor()) {
+      await Browser.open({ url })
+      return
+    }
     if (!isElectron()) {
       // In remote mode, open in new tab
       window.open(url, '_blank')

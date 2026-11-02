@@ -97,6 +97,7 @@ beforeEach(() => {
     isRemoteMode: () => env.remote,
     authGetProviders: vi.fn().mockResolvedValue({ success: true, data: [provider('external-pkce'), provider('device-provider'), provider(CLI_DELEGATED_PROVIDER_ID), provider('preset', { baseUrl: 'https://preset.example' })] }),
     authStartLogin: vi.fn().mockResolvedValue(start('owned-login')),
+    openExternal: vi.fn().mockResolvedValue(undefined),
     authCompleteLogin: vi.fn().mockResolvedValue({ success: true, data: { success: true, sourceId: 'account-2', sourceIds: ['account-2'] } }),
     authOpenLoginWindow: vi.fn().mockResolvedValue({ success: true }),
     authCancelLogin: vi.fn().mockResolvedValue({ success: true }),
@@ -200,17 +201,14 @@ describe('AI sources OAuth UI', () => {
     expect(header).toBeDefined()
   })
 
-  it('shows remote manual login and propagates provider and login ID on submission', async () => {
+  it('opens the redirect login URL through the platform external-browser adapter', async () => {
     env.remote = true
     const { render } = await settings()
     await button(render(), 'external-pkce Add another account').props.onClick()
-    let tree = render()
-    expect(text(tree)).toContain('Manual login')
-    expect(button(tree, 'Open Login Window')).toBeUndefined()
-    nodes(tree).find(node => node.type === 'input').props.onChange({ target: { value: ' code#csrf ' } })
-    tree = render()
-    await button(tree, 'Complete Login').props.onClick()
-    expect(env.api.authCompleteLogin).toHaveBeenCalledWith('external-pkce', 'code#csrf', 'owned-login')
+    const loginLink = nodes(render()).find(node => node.type === 'a' && node.props?.href === 'https://issuer.example/login')
+    expect(loginLink).toBeDefined()
+    loginLink.props.onClick({ preventDefault: vi.fn() })
+    expect(env.api.openExternal).toHaveBeenCalledWith('https://issuer.example/login')
   })
 
   it.each([false, true])('automatically waits for provider-owned login before reloading config (remote=%s)', async remote => {
@@ -259,6 +257,11 @@ describe('AI sources OAuth UI', () => {
     const { render, setConfig } = await settings()
     const pending = button(render(), 'device-provider description').props.onClick()
     await flush()
+    expect(text(render())).toContain('ABCD')
+    const verificationLink = nodes(render()).find(node => node.type === 'a' && node.props?.href === 'https://issuer.example/device')
+    expect(verificationLink).toBeDefined()
+    verificationLink.props.onClick({ preventDefault: vi.fn() })
+    expect(env.api.openExternal).toHaveBeenCalledWith('https://issuer.example/device')
     await button(render(), 'Cancel').props.onClick()
     expect(env.api.authCancelLogin).toHaveBeenCalledWith('device-provider', 'device-login')
     complete({ success: true })

@@ -9,6 +9,9 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { bootSplashScript } from './vite.boot-script'
 
+const defaultServerUrl = process.env.HALO_MOBILE_DEFAULT_SERVER_URL || ''
+const defaultServerToken = process.env.HALO_MOBILE_DEFAULT_SERVER_TOKEN || ''
+
 // Artifact images load straight from the Halo computer, which a LAN serves
 // over plain http; the page policy shared with the desktop allows remote
 // images only over https.
@@ -25,6 +28,11 @@ export default defineConfig({
     // Mark as Capacitor build so code can detect at compile time
     '__CAPACITOR__': JSON.stringify(true),
     '__BUILD_TIME__': JSON.stringify(new Date().toISOString()),
+    // Optional private-build bootstrap values. Keep them in the build
+    // environment rather than source control; they are still extractable from
+    // the resulting APK and must never be an LLM provider credential.
+    '__HALO_DEFAULT_SERVER_URL__': JSON.stringify(defaultServerUrl),
+    '__HALO_DEFAULT_SERVER_TOKEN__': JSON.stringify(defaultServerToken),
     // Disable analytics define placeholders (not used in mobile)
     '__HALO_GA_MEASUREMENT_ID__': JSON.stringify(''),
     '__HALO_GA_API_SECRET__': JSON.stringify(''),
