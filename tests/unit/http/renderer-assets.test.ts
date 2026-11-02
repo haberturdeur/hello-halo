@@ -42,7 +42,12 @@ vi.mock('fs', async (original) => {
   }
 })
 
-import { rendererAssetCopies, resolveAssetPath, serveRendererAssets } from '../../../src/main/http/renderer-assets'
+import {
+  rendererAssetCopies,
+  resolveAssetPath,
+  serveRendererAssets,
+  shouldProxyViteDevServer,
+} from '../../../src/main/http/renderer-assets'
 
 let root: string
 let server: Server
@@ -77,6 +82,12 @@ beforeEach(() => {
 })
 
 describe('remote renderer assets', () => {
+  it('serves built assets in headless server mode even from an unpackaged build', () => {
+    expect(shouldProxyViteDevServer(true, true)).toBe(false)
+    expect(shouldProxyViteDevServer(true, false)).toBe(true)
+    expect(shouldProxyViteDevServer(false, false)).toBe(false)
+  })
+
   it('serves a file by reading it whole, with the validators express.static sent', async () => {
     const response = await fetch(`${base}/assets/index-abc123.js`)
     const stats = statSync(join(root, 'assets', 'index-abc123.js'))

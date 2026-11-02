@@ -25,3 +25,11 @@ export function getServerPort(): number {
   const n = raw ? parseInt(raw, 10) : NaN
   return Number.isFinite(n) && n > 0 ? n : 8080
 }
+
+/**
+ * Interface used by the remote-access HTTP server. Defaults to the historical
+ * all-interface bind; headless deployments can constrain it explicitly.
+ */
+export function getServerHost(): string {
+  return process.env.HALO_SERVER_HOST?.trim() || '0.0.0.0'
+}

@@ -21,6 +21,11 @@ import type { RequestHandler, Response } from 'express'
 /** Errors that mean "no such file here": the request falls through to the SPA shell. */
 const MISSING = new Set(['ENOENT', 'ENOTDIR', 'ENAMETOOLONG'])
 
+/** Headless mode has no Vite process, so it must serve the built renderer. */
+export function shouldProxyViteDevServer(isDev: boolean, isServerMode: boolean): boolean {
+  return isDev && !isServerMode
+}
+
 /** Files being sent right now, one copy per version, with how many responses use it. */
 const sending = new Map<string, { version: string; body: Promise<Buffer>; users: number }>()
 

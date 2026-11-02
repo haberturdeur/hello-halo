@@ -7,6 +7,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
+const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto)
+
 const { retainArtifactSpace, releaseArtifactSpace } = vi.hoisted(() => ({
   retainArtifactSpace: vi.fn(async (..._args: unknown[]): Promise<{ success: boolean; data?: { recreated: boolean } }> => ({ success: true })),
   releaseArtifactSpace: vi.fn(async (..._args: unknown[]) => ({ success: true })),
@@ -34,6 +36,9 @@ let api: typeof import('../../../src/renderer/api')['api']
 beforeEach(async () => {
   vi.useFakeTimers()
   vi.resetModules()
+  // Non-loopback plain HTTP keeps getRandomValues but does not expose
+  // randomUUID because the page is not a secure context.
+  vi.stubGlobal('crypto', { getRandomValues })
   retainArtifactSpace.mockClear()
   releaseArtifactSpace.mockClear()
   const mod = await import('../../../src/renderer/services/artifact-space-holds')
@@ -43,6 +48,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllGlobals()
 })
 
 describe('holdArtifactSpace', () => {

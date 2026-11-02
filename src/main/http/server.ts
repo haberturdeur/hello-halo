@@ -23,10 +23,11 @@ import {
 import { ACCESS_CODE_MIN_SUBMIT_LENGTH, PASSWORD_MAX_LENGTH } from '../../shared/auth/password-policy'
 import { initWebSocket, shutdownWebSocket, getClientCount } from './websocket'
 import { getInvitePage } from './invite-page'
-import { serveRendererAssets } from './renderer-assets'
+import { serveRendererAssets, shouldProxyViteDevServer } from './renderer-assets'
 import { getTeamStore } from '../apps/team'
 import { getLocalIdentity } from './identity/index'
 import { getMainWindow as getMainWindowFromService } from '../foundation/window.service'
+import { getServerHost, isServerMode } from '../foundation/runtime-mode'
 
 // Vite dev server URL. Pinned to 127.0.0.1, not 'localhost': electron.vite.config.ts
 // binds Vite to 127.0.0.1 only (see its comment), but Node 17+ on macOS resolves
@@ -245,7 +246,7 @@ export async function startHttpServer(
   registerApiRoutes(expressApp)
 
   // Serve static files (frontend)
-  if (is.dev) {
+  if (shouldProxyViteDevServer(is.dev, isServerMode())) {
     // In development, proxy to Vite dev server
     expressApp.use('/{*path}', (req, res) => {
       // Check if authenticated (has valid token in query or localStorage check via cookie)
@@ -341,7 +342,7 @@ export async function startHttpServer(
   initWebSocket(httpServer)
 
   // In dev mode, proxy Vite HMR WebSocket connections
-  if (is.dev) {
+  if (shouldProxyViteDevServer(is.dev, isServerMode())) {
     httpServer.on('upgrade', (req, socket, head) => {
       const url = new URL(req.url || '/', `http://${req.headers.host}`)
 
@@ -415,9 +416,10 @@ export async function startHttpServer(
 
   // Start listening
   return new Promise((resolve, reject) => {
-    httpServer!.listen(listenPort, '0.0.0.0', () => {
+    const listenHost = getServerHost()
+    httpServer!.listen(listenPort, listenHost, () => {
       serverPort = listenPort
-      console.log(`[HTTP] Server started on port ${listenPort}`)
+      console.log(`[HTTP] Server started on ${listenHost}:${listenPort}`)
       // Never log the access token itself — the remote-access PIN must not
       // reach logs — record only that one is active.
       console.log(`[HTTP] Access token ${existingToken ? 'restored' : 'generated'} (len=${token.length})`)

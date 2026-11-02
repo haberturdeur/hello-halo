@@ -17,6 +17,7 @@
  */
 
 import { create } from 'zustand'
+import { v4 as uuidv4 } from 'uuid'
 import { api } from '../api'
 import { useNotificationStore } from './notification.store'
 import { useChatStore } from './chat.store'
@@ -607,7 +608,7 @@ export const useTlonStore = create<TlonState>((set, get) => ({
       }
       if (!conversationId) {
         const errMsg: TlonChatMessage = {
-          id: crypto.randomUUID(),
+          id: uuidv4(),
           role: 'assistant',
           content: i18n.t('Could not start the chat.'),
           error: true,
@@ -625,7 +626,7 @@ export const useTlonStore = create<TlonState>((set, get) => ({
       }
     }
 
-    const userMsg: TlonChatMessage = { id: crypto.randomUUID(), role: 'user', content }
+    const userMsg: TlonChatMessage = { id: uuidv4(), role: 'user', content }
     retainKbChatDetail(kbId, conversationId)
     set(state => ({
       chatSessions: {
@@ -791,7 +792,7 @@ export const useTlonStore = create<TlonState>((set, get) => ({
       const session = state.chatSessions[kbId]
       if (!session) return {}
       const assistantMsg: TlonChatMessage = {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         role: 'assistant',
         content: answer,
         sources: sources.length ? sources : undefined,
@@ -810,7 +811,7 @@ export const useTlonStore = create<TlonState>((set, get) => ({
     set(state => {
       const session = state.chatSessions[kbId]
       if (!session) return {}
-      const errMsg: TlonChatMessage = { id: crypto.randomUUID(), role: 'assistant', content: message, error: true }
+      const errMsg: TlonChatMessage = { id: uuidv4(), role: 'assistant', content: message, error: true }
       return {
         chatSessions: {
           ...state.chatSessions,

@@ -16,13 +16,14 @@
  */
 
 import { api } from '../api'
+import { v4 as uuidv4 } from 'uuid'
 
 const RELEASE_GRACE_MS = 5_000
 /** Well inside main's hold lease (3 min), even with throttled background timers. */
 const RENEW_INTERVAL_MS = 60_000
 
 /** Identifies this renderer instance (or remote tab) to the main process. */
-const clientId = globalThis.crypto.randomUUID()
+const clientId = uuidv4()
 
 const holdCounts = new Map<string, number>()
 const pendingReleases = new Map<string, ReturnType<typeof setTimeout>>()

@@ -7,11 +7,12 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 
-import { isServerMode, getServerPort } from '../../../src/main/foundation/runtime-mode'
+import { isServerMode, getServerHost, getServerPort } from '../../../src/main/foundation/runtime-mode'
 
 describe('runtime-mode', () => {
   beforeEach(() => {
     delete process.env.HALO_SERVER_MODE
+    delete process.env.HALO_SERVER_HOST
     delete process.env.PORT
     delete process.env.HALO_SERVER_PORT
   })
@@ -61,6 +62,17 @@ describe('runtime-mode', () => {
     it('defaults to 8080 for a negative value', () => {
       process.env.PORT = '-5'
       expect(getServerPort()).toBe(8080)
+    })
+  })
+
+  describe('getServerHost', () => {
+    it('defaults to all interfaces', () => {
+      expect(getServerHost()).toBe('0.0.0.0')
+    })
+
+    it('honors HALO_SERVER_HOST after trimming whitespace', () => {
+      process.env.HALO_SERVER_HOST = ' 127.0.0.1 '
+      expect(getServerHost()).toBe('127.0.0.1')
     })
   })
 })
