@@ -13,12 +13,13 @@ import { BROWSER_META, TERMINAL_META, CHANGES_META } from '../canvas'
 import { useAppStore } from '../../stores/app.store'
 import { useActiveModelTarget } from '../../hooks/useActiveModelTarget'
 import { openPersonModelSettings } from '../../utils/people-navigation'
-import { getModelDisplayName, type AISourcesConfig } from '../../types'
+import { getModelDisplayName } from '../../types'
 import { useTranslation } from '../../i18n'
 import { ModelSelectSheet } from '../ai-config/ModelSelector'
 import { useSpaceQuickActions } from '../../hooks/useSpaceQuickActions'
 import { trackHome, trackNavigate } from '../../services/home-telemetry'
 import { trackToolOpen } from '../../services/tool-session-telemetry'
+import { useEffectiveAiSources } from '../../hooks/useEffectiveAiSources'
 
 const BrowserIcon = BROWSER_META.icon
 const TerminalIcon = TERMINAL_META.icon
@@ -35,9 +36,7 @@ export function MobileOverflowMenu({ onSearch }: MobileOverflowMenuProps) {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false)
   const [isModelSheetOpen, setIsModelSheetOpen] = useState(false)
 
-  const aiSources: AISourcesConfig = config?.aiSources?.version === 2
-    ? config.aiSources
-    : { version: 2, currentId: null, sources: [] }
+  const aiSources = useEffectiveAiSources()
   // The model the conversation on screen runs on: a regular conversation's own
   // pin, or the settings of the digital human being talked to.
   const modelTarget = useActiveModelTarget()

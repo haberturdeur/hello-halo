@@ -28,6 +28,7 @@ import { isAnthropicProvider } from '../../types'
 import { useTranslation } from '../../i18n'
 import { useFreshModelCatalogs } from '../../hooks/useFreshModelCatalogs'
 import { groupModels, ModelAvailabilityNotice, ModelGroupHeading, ModelRowLabel } from '../ai-config/model-list-parts'
+import { useEffectiveAiSources } from '../../hooks/useEffectiveAiSources'
 
 // ============================================
 // Types
@@ -100,10 +101,7 @@ export function AppModelSelector({
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
   useFreshModelCatalogs(isOpen)
 
-  // Get aiSources config
-  const aiSources: AISourcesConfig = config?.aiSources?.version === 2
-    ? config.aiSources
-    : { version: 2, currentId: null, sources: [] }
+  const aiSources: AISourcesConfig = useEffectiveAiSources()
   // What the app runs on. An override naming a removed account follows the
   // global selection, as the main process resolves it.
   const selected = resolveModelSelection(aiSources, { modelSourceId, modelId })

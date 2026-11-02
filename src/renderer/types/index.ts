@@ -155,7 +155,8 @@ export interface SystemConfig {
 export interface AgentConfig {
   maxTurns: number;         // Maximum tool call turns per message
   promptProfile?: 'official' | 'halo';  // System prompt profile
-  sdkEngine?: 'anthropic' | 'halo' | 'codex' | 'dsh';  // Agent SDK engine (requires restart)
+  sdkEngine?: 'anthropic' | 'halo' | 'codex' | 'dsh' | 'cursor';  // Agent SDK engine (requires restart)
+  engineModel?: string;       // Global model selected from an engine-owned catalog
   configDirMode?: 'halo' | 'cc' | 'custom';  // Claude CLI config directory mode
   customConfigDir?: string;  // Custom config dir path (when configDirMode === 'custom')
   enableDigitalHumans?: boolean; // Enable Digital Humans MCP tools (automation app management)
@@ -392,7 +393,7 @@ export interface CreateSpaceInput {
 // ============================================
 
 /** Agent engine that owns a conversation. Used for the EngineBadge UI. */
-export type EngineId = 'anthropic' | 'halo' | 'codex' | 'dsh';
+export type EngineId = 'anthropic' | 'halo' | 'codex' | 'dsh' | 'cursor';
 
 // Lightweight metadata for conversation list (no messages)
 // Used by listConversations for fast loading
@@ -547,6 +548,13 @@ export type TodoState = 'pending' | 'in_progress' | 'completed';
 export interface EngineCapabilities {
   engineId: EngineId;
   displayName: string;
+  modelSelection?: {
+    managedBy: 'engine';
+    sourceId: string;
+    defaultModel: string;
+    deploymentModel?: string;
+    models: Array<{ id: string; name: string; description?: string }>;
+  };
   streaming: {
     text: 'token' | 'item' | 'turn';
     reasoning: 'token' | 'item' | 'final-only' | 'none';

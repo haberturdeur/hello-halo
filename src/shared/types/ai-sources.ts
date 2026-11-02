@@ -53,7 +53,7 @@ export function resolveLocalizedText(value: LocalizedText, locale: string): stri
  * token. Distinct from `oauth` because every token-management path
  * (accessToken presence checks, refresh, logout) must skip these sources.
  */
-export type AuthType = 'api-key' | 'oauth' | 'delegated'
+export type AuthType = 'api-key' | 'oauth' | 'delegated' | 'engine'
 
 /** Non-secret source and model captured by a running agent for its children. */
 export interface AgentModelSelection {
@@ -690,6 +690,7 @@ export function activeModelReplacement(source: AISource, now: number = Date.now(
  */
 export function hasAnyAISource(config: AISourcesConfig): boolean {
   return config.sources.length > 0 && config.sources.some(s => {
+    if (s.authType === 'engine') return s.availableModels.length > 0
     if (s.authType === 'api-key') {
       return !!s.apiKey
     }
@@ -701,6 +702,7 @@ export function hasAnyAISource(config: AISourcesConfig): boolean {
  * Check if a specific source is configured
  */
 export function isSourceConfigured(source: AISource): boolean {
+  if (source.authType === 'engine') return source.availableModels.length > 0
   if (source.authType === 'api-key') {
     return !!source.apiKey
   }

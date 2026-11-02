@@ -12,6 +12,9 @@ vi.mock('../../../src/renderer/stores/apps.store', () => ({ useAppsStore: (selec
 vi.mock('../../../src/renderer/stores/chat.store', () => ({ useChatStore: Object.assign((select: any) => select(env.chat), { getState: () => env.chat }) }))
 vi.mock('../../../src/renderer/hooks/useActiveModelTarget', () => ({ useActiveModelTarget: () => env.target }))
 vi.mock('../../../src/renderer/hooks/useIsMobile', () => ({ useIsMobile: () => env.mobile }))
+vi.mock('../../../src/renderer/hooks/useEffectiveAiSources', () => ({
+  useEffectiveAiSources: () => env.app.config.aiSources,
+}))
 vi.mock('../../../src/renderer/utils/people-navigation', () => ({ openPersonModelSettings: vi.fn() }))
 vi.mock('../../../src/renderer/services/home-telemetry', () => ({ trackHome: vi.fn() }))
 vi.mock('../../../src/renderer/components/ai-config/ThinkingLevelControl', () => ({ ThinkingLevelControl: () => null }))

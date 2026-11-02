@@ -32,7 +32,7 @@ import {
  * render site as `t()` literals — i18next-parser only extracts literal keys,
  * so moving the copy into this table would drop the existing translations.
  */
-const ENGINE_IDS: readonly EngineId[] = ['anthropic', 'halo', 'codex', 'dsh']
+const ENGINE_IDS: readonly EngineId[] = ['anthropic', 'halo', 'codex', 'dsh', 'cursor']
 
 // ─── Built-in MCP Extensions ────────────────────────────────────────────────────
 
@@ -202,6 +202,10 @@ export function AdvancedSection({ config, setConfig }: AdvancedSectionProps) {
     dsh: {
       title: t('DeepSeek dsh'),
       description: t('Powered by the open-source DeepSeek dsh runtime, which upstream is still changing and has not stabilized. Best used with DeepSeek models. Experimental.'),
+    },
+    cursor: {
+      title: t('Cursor SDK'),
+      description: t('Uses the direct Cursor SDK runtime. Requires CURSOR_API_KEY or a stored Cursor SDK login. Experimental.'),
     },
   }
 

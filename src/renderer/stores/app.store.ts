@@ -6,10 +6,16 @@ import { create } from 'zustand'
 import { api } from '../api'
 import { isCapacitor } from '../api/transport'
 import type { HaloConfig, AppView, McpServerStatus } from '../types'
-import { hasAnyAISource } from '../types'
 import { useSpaceStore } from './space.store'
 import { useAppsStore } from './apps.store'
 import { useChatStore } from './chat.store'
+import { useEngineStore } from './engine.store'
+import { hasUsableModelSource } from '../lib/effective-ai-sources'
+
+async function hasUsableSource(config: HaloConfig): Promise<boolean> {
+  await useEngineStore.getState().load()
+  return hasUsableModelSource(config.aiSources, useEngineStore.getState().capabilities)
+}
 
 // Git Bash installation progress
 interface GitBashInstallProgress {
@@ -311,7 +317,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ config })
     // Show setup if first launch or no AI source configured
     // (modelConfigSkipped honors an explicit deferral from the first-run wizard)
-    if (config.isFirstLaunch || (!hasAnyAISource(config.aiSources) && !config.modelConfigSkipped)) {
+    if (config.isFirstLaunch || (!await hasUsableSource(config) && !config.modelConfigSkipped)) {
       get().navigate('setup')
     } else {
       await get().enterApp()
@@ -375,7 +381,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         // Determine initial view based on config
         // Show setup if first launch or no AI source configured (OAuth or Custom API).
         // modelConfigSkipped honors a user's explicit deferral from the first-run wizard.
-        if (config.isFirstLaunch || (!hasAnyAISource(config.aiSources) && !config.modelConfigSkipped)) {
+        if (config.isFirstLaunch || (!await hasUsableSource(config) && !config.modelConfigSkipped)) {
           console.log('[Store] First launch or no AI source, showing setup')
           set({ view: 'setup' })
         } else {

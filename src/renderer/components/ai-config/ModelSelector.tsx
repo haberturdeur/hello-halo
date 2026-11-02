@@ -40,13 +40,12 @@ import { useFreshModelCatalogs } from '../../hooks/useFreshModelCatalogs'
 import { trackHome } from '../../services/home-telemetry'
 import { isAnthropicProvider } from '../../types'
 import { validateModelCapabilityOverride } from '../../../shared/model-capability-overrides'
+import { useEffectiveAiSources } from '../../hooks/useEffectiveAiSources'
+import { DEFAULT_MAX_TURNS } from '../../../shared/constants/agent-limits'
 
 /** Read v2 aiSources config with empty fallback */
 function useAiSources(): AISourcesConfig {
-  const config = useAppStore(s => s.config)
-  return config?.aiSources?.version === 2
-    ? config.aiSources
-    : { version: 2, currentId: null, sources: [] }
+  return useEffectiveAiSources()
 }
 
 /**
@@ -103,6 +102,15 @@ function ModelList({ onDone }: { onDone: () => void }) {
     const spaceId = chat.currentSpaceId
     if (spaceId && conversationId) {
       await chat.setConversationModel(spaceId, conversationId, sourceId, modelId)
+    }
+
+    const selectedSource = aiSources.sources.find(source => source.id === sourceId)
+    if (selectedSource?.authType === 'engine') {
+      const agent = { maxTurns: config.agent?.maxTurns ?? DEFAULT_MAX_TURNS, ...config.agent, engineModel: modelId }
+      const result = await api.setConfig({ agent })
+      if (result.success) setConfig({ ...config, agent })
+      onDone()
+      return
     }
 
     // 2. Update the global last-used selection (source first if needed, then model)

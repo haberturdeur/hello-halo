@@ -11,6 +11,9 @@ vi.mock('react', async original => ({
 vi.mock('../../../src/renderer/api', () => ({ api: env.api }))
 vi.mock('../../../src/renderer/i18n', () => ({ useTranslation: () => ({ t: (text: string) => text }), getCurrentLanguage: () => 'en' }))
 vi.mock('../../../src/renderer/stores/app.store', () => ({ useAppStore: () => env.app }))
+vi.mock('../../../src/renderer/hooks/useEffectiveAiSources', () => ({
+  useEffectiveAiSources: () => env.app.config.aiSources,
+}))
 vi.mock('../../../src/renderer/components/settings/ProviderSelector', () => ({ ProviderSelector: () => null }))
 vi.mock('../../../src/renderer/components/settings/ModelConfigPanel', () => ({ ModelConfigPanel: () => null }))
 vi.mock('../../../src/renderer/components/settings/DelegatedLoginDialog', () => ({ DelegatedLoginDialog: () => null }))
