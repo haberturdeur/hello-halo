@@ -21,7 +21,7 @@ if (values.model) process.env.HALO_TEST_MODEL_ID = values.model
 if (values['api-type']) process.env.HALO_TEST_API_TYPE = values['api-type']
 const engine = process.env.HALO_TEST_SDK_ENGINE || 'anthropic'
 const model = process.env.HALO_TEST_MODEL_ID || process.env.HALO_TEST_MODEL
-assert(['anthropic', 'halo', 'codex', 'dsh'].includes(engine), 'Unknown engine')
+assert(['anthropic', 'halo', 'codex', 'dsh', 'cursor'].includes(engine), 'Unknown engine')
 assert(model, 'Configure HALO_TEST_MODEL or pass --model')
 assert(process.env.HALO_TEST_API_KEY || process.env.HALO_TEST_MODEL_API_KEY || process.env.HALO_TEST_SIGNED_IN_SOURCE || process.env.HALO_TEST_OAUTH_SOURCE,
   'Configure a real model credential before running this suite')

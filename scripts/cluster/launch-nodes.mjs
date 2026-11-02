@@ -132,7 +132,7 @@ function resolveModelSource() {
   const apiType = process.env.HALO_TEST_API_TYPE || 'chat_completions'
   if (!['chat_completions', 'responses', 'anthropic_passthrough', 'kiro'].includes(apiType)) FAIL('HALO_TEST_API_TYPE must name a supported API type')
   const sdkEngine = process.env.HALO_TEST_SDK_ENGINE || 'anthropic'
-  if (!['anthropic', 'halo', 'codex', 'dsh'].includes(sdkEngine)) FAIL('HALO_TEST_SDK_ENGINE must name a supported engine')
+  if (!['anthropic', 'halo', 'codex', 'dsh', 'cursor'].includes(sdkEngine)) FAIL('HALO_TEST_SDK_ENGINE must name a supported engine')
   if (!apiKey && !signedIn) {
     WARN(
       'No model API key found (HALO_TEST_API_KEY / HALO_TEST_MODEL_API_KEY).\n' +

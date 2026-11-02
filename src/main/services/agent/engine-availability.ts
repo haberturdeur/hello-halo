@@ -52,15 +52,16 @@ export interface EngineAvailability {
  * about whether the engine can run. Its real requirement is the platform-native
  * `codex` binary, probed separately via `resolveBundledCodexBinary()`.
  */
-const ENGINE_PACKAGES: Record<Exclude<EngineId, 'codex' | 'dsh'>, string> = {
+const ENGINE_PACKAGES: Record<Exclude<EngineId, 'codex' | 'dsh' | 'cursor'>, string> = {
   anthropic: '@anthropic-ai/claude-agent-sdk',
   halo: '@hello-halo/agent-sdk',
 }
 
 /** Package that carries the Codex version metadata (binary lives in its platform subpackage). */
 const CODEX_VERSION_PACKAGE = '@openai/codex-sdk'
+const CURSOR_PACKAGE = '@cursor/sdk'
 
-export const ALL_ENGINE_IDS: EngineId[] = ['anthropic', 'halo', 'codex', 'dsh']
+export const ALL_ENGINE_IDS: EngineId[] = ['anthropic', 'halo', 'codex', 'dsh', 'cursor']
 
 const probes = new Map<EngineId, Promise<EngineAvailability>>()
 
@@ -89,6 +90,7 @@ export async function getEngineAvailability(
 function probeEngine(engineId: EngineId): Promise<EngineAvailability> {
   if (engineId === 'codex') return probeCodex()
   if (engineId === 'dsh') return probeDsh()
+  if (engineId === 'cursor') return probeCursor()
   return Promise.resolve(probePackageEngine(engineId))
 }
 
@@ -96,7 +98,7 @@ function probeEngine(engineId: EngineId): Promise<EngineAvailability> {
 // Probes
 // ============================================
 
-function probePackageEngine(engineId: Exclude<EngineId, 'codex' | 'dsh'>): EngineAvailability {
+function probePackageEngine(engineId: Exclude<EngineId, 'codex' | 'dsh' | 'cursor'>): EngineAvailability {
   const absent: EngineAvailability = { engineId, available: false, version: '', fingerprint: '' }
 
   const pkgDir = findPackageDir(ENGINE_PACKAGES[engineId])
@@ -167,6 +169,28 @@ async function probeDsh(): Promise<EngineAvailability> {
     available: true,
     version: runtime.version,
     fingerprint: fingerprintFile(runtime.entryPath),
+  }
+}
+
+/**
+ * Probe the optional Cursor TypeScript SDK without importing it. Importing the
+ * SDK may initialize its local platform, so availability stays a file check.
+ */
+export async function probeCursor(_env: NodeJS.ProcessEnv = process.env): Promise<EngineAvailability> {
+  const absent = (reason: string): EngineAvailability =>
+    ({ engineId: 'cursor', available: false, version: '', fingerprint: '', reason })
+
+  const pkgDir = findPackageDir(CURSOR_PACKAGE)
+  if (!pkgDir) return absent(`${CURSOR_PACKAGE} is not installed in this build`)
+  const manifest = readManifest(pkgDir)
+  const entry = manifest && resolveEntryFile(pkgDir, manifest)
+  if (!manifest || !entry) return absent(`${CURSOR_PACKAGE} has no loadable entry file`)
+
+  return {
+    engineId: 'cursor',
+    available: true,
+    version: typeof manifest.version === 'string' ? manifest.version : '',
+    fingerprint: fingerprintFile(entry),
   }
 }
 

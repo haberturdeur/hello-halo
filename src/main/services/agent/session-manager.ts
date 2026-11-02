@@ -1164,7 +1164,7 @@ async function getOrCreateV2SessionInner(
       // Check if credentials have changed since session was created
       // This catches race conditions where session was created with stale credentials
       // (e.g., warm-up started before config save completed)
-      const currentGen = getCredentialsGeneration(existing.sourceId)
+      const currentGen = sdkOptions.credentialsGeneration ?? getCredentialsGeneration(existing.sourceId)
       const needsCredentialRebuild =
         existing.sourceId !== sourceId ||
         existing.credentialsGeneration !== currentGen ||
@@ -1286,7 +1286,10 @@ async function getOrCreateV2SessionInner(
 
   // Handle session resumption with migration support
   let effectiveSessionId = sessionId
-  if (sessionId && workDir && getActiveEngine() !== 'codex' && getActiveEngine() !== 'dsh') {
+  if (sessionId && workDir
+    && getActiveEngine() !== 'codex'
+    && getActiveEngine() !== 'dsh'
+    && getActiveEngine() !== 'cursor') {
     // Attempt to migrate session file from old config directory if needed
     const sessionExists = migrateSessionIfNeeded(workDir, sessionId, sdkOptions.env?.CLAUDE_CONFIG_DIR)
     if (sessionExists) {

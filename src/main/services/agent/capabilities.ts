@@ -17,7 +17,7 @@
  * new fields is safe — renderer fallbacks tolerate missing flags.
  */
 
-export type EngineId = 'anthropic' | 'halo' | 'codex' | 'dsh'
+export type EngineId = 'anthropic' | 'halo' | 'codex' | 'dsh' | 'cursor'
 
 /**
  * Logical tool kinds Halo's UI knows how to render. The renderer maps tool
@@ -59,6 +59,23 @@ export interface EngineCapabilities {
   engineId: EngineId
   /** Display label for engine badge (i18n is applied at render site). */
   displayName: string
+  /**
+   * Engines that authenticate and select their model outside Halo's AI-source
+   * registry can advertise that boundary here.
+   */
+  modelSelection?: {
+    managedBy: 'engine'
+    /** Stable identity stored in conversation/app model overrides. */
+    sourceId: string
+    defaultModel: string
+    /** Deployment-wide override that takes precedence over saved selections. */
+    deploymentModel?: string
+    models: Array<{
+      id: string
+      name: string
+      description?: string
+    }>
+  }
   streaming: {
     /** Assistant text channel granularity. */
     text: 'token' | 'item' | 'turn'
@@ -209,6 +226,52 @@ export const HALO_CAPABILITIES: EngineCapabilities = {
   },
 }
 
+/** Cursor TypeScript SDK local runtime. */
+export const CURSOR_CAPABILITIES: EngineCapabilities = {
+  engineId: 'cursor',
+  displayName: 'Cursor SDK',
+  modelSelection: {
+    managedBy: 'engine',
+    sourceId: 'engine:cursor',
+    defaultModel: 'auto',
+    models: [{ id: 'auto', name: 'Auto' }],
+  },
+  streaming: {
+    text: 'item',
+    reasoning: 'item',
+    toolInput: 'final-only',
+    toolOutput: 'final-only',
+  },
+  tools: {
+    native: [
+      'Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob',
+      'WebSearch', 'WebFetch', 'TodoWrite', 'Task', 'AskUserQuestion', 'Mcp',
+    ],
+    synthetic: [
+      { kind: 'Bash', from: 'shell', lossy: false },
+      { kind: 'Edit', from: 'strReplace', lossy: false },
+      { kind: 'TodoWrite', from: 'updateTodos', lossy: false },
+    ],
+    shellHeuristics: false,
+  },
+  todo: { states: ['pending', 'in_progress', 'completed'], hasActiveForm: false },
+  subAgent: { model: 'imperative', visibleLifecycle: false },
+  prompt: { nativeAgentGuidance: true },
+  features: {
+    skills: false,
+    mcp: true,
+    hooks: false,
+    permissionRules: false,
+    sessionResume: true,
+    sessionFork: false,
+    interrupt: true,
+    multimodalImage: true,
+    contextCompaction: true,
+    askUserQuestion: false,
+    goal: false,
+  },
+}
+
 /**
  * Codex (app-server) and DeepSeek Harness — see the adapter subtrees for the
  * canonical definitions. Re-exported here so callers don't need to reach into
@@ -230,5 +293,6 @@ export function defaultCapabilitiesFor(engineId: EngineId): EngineCapabilities {
     case 'halo': return HALO_CAPABILITIES
     case 'codex': return CODEX_CAPABILITIES
     case 'dsh': return DSH_CAPABILITIES
+    case 'cursor': return CURSOR_CAPABILITIES
   }
 }

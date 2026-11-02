@@ -28,6 +28,7 @@
  *   'anthropic' (default) → @anthropic-ai/claude-agent-sdk (CC SDK)
  *   'halo'                → @hello-halo/agent-sdk (Halo SDK)
  *   'codex'               → @openai/codex-sdk through CC protocol adapter
+ *   'cursor'              → @cursor/sdk local runtime adapter
  *
  * Engine selection degrades, it does not abort:
  *   The selected engine is user configuration; whether its package shipped is
@@ -100,10 +101,9 @@ let _degradedFrom: EngineId | null = null
  * leads because it is the default engine and the only one whose package is a
  * plain registry dependency.
  *
- * dsh is absent on purpose: it is opt-in and most builds do not ship its
- * runtime, so it is only ever loaded when the config asks for it by name.
- * Degrading an unrelated engine onto it would move a user to a runtime they
- * never selected.
+ * dsh and cursor are absent on purpose: both are opt-in experimental engines,
+ * so each is loaded only when the config asks for it by name. Degrading an
+ * unrelated engine onto one would move a user to a runtime they never selected.
  */
 const FALLBACK_ORDER: EngineId[] = ['anthropic', 'halo', 'codex']
 
@@ -113,6 +113,7 @@ const ENGINE_LABELS: Record<EngineId, string> = {
   halo: 'Halo SDK (@hello-halo/agent-sdk)',
   codex: 'Codex SDK (@openai/codex-sdk adapter)',
   dsh: 'DeepSeek Harness (bundled runtime)',
+  cursor: 'Cursor SDK (@cursor/sdk adapter)',
 }
 
 // ============================================
@@ -160,6 +161,10 @@ async function doInitSdk(): Promise<void> {
     const startTime = performance.now()
     try {
       _sdk = await loadEngine(engineId)
+      // Cursor's dynamic catalog must be ready before the renderer caches
+      // capabilities. Other SDK mocks and upstream modules do not declare this
+      // optional Halo extension.
+      if (engineId === 'cursor') await _sdk.initialize?.()
     } catch (error) {
       // The probe reported this engine as present, so a failure here means the
       // shipped package is unusable rather than absent. Try the next candidate.
@@ -194,7 +199,7 @@ async function doInitSdk(): Promise<void> {
 
 /** Coerce an arbitrary persisted value to a known engine id. */
 function normalizeEngineId(value: unknown): EngineId {
-  if (value === 'anthropic' || value === 'halo' || value === 'codex' || value === 'dsh') return value
+  if (value === 'anthropic' || value === 'halo' || value === 'codex' || value === 'dsh' || value === 'cursor') return value
   if (value != null && value !== '') {
     console.warn(`[SDK] Unknown SDK engine "${String(value)}" in config; using "anthropic".`)
   }
@@ -227,6 +232,7 @@ async function loadEngine(engineId: EngineId): Promise<SdkModule> {
   }
   if (engineId === 'codex') return loadCodexSdk()
   if (engineId === 'dsh') return loadDshSdk()
+  if (engineId === 'cursor') return loadCursorSdk()
   return loadCcSdk()
 }
 
@@ -266,6 +272,14 @@ async function loadCodexSdk(): Promise<SdkModule> {
 async function loadDshSdk(): Promise<SdkModule> {
   const { createDshSdkModule } = await import('./dsh')
   return createDshSdkModule() as unknown as SdkModule
+}
+
+async function loadCursorSdk(): Promise<SdkModule> {
+  // @vite-ignore keeps this removable: availability excludes Cursor in builds
+  // that omit the optional package, so this import is never attempted there.
+  const sdk = await import(/* @vite-ignore */ '@cursor/sdk')
+  const { createCursorSdkModule } = await import('./cursor')
+  return createCursorSdkModule(sdk) as unknown as SdkModule
 }
 
 async function loadCcSdk(): Promise<SdkModule> {

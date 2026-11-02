@@ -14,9 +14,10 @@ import type { EngineAvailability } from '../../../../src/main/services/agent/eng
 let configuredEngine: unknown = 'anthropic'
 let availability: EngineAvailability[] = []
 let probedEngines: readonly string[] | undefined
+const cursorCreate = vi.hoisted(() => vi.fn())
 
-function engines(overrides: Partial<Record<'anthropic' | 'halo' | 'codex', boolean>>): EngineAvailability[] {
-  return (['anthropic', 'halo', 'codex'] as const).map(engineId => ({
+function engines(overrides: Partial<Record<'anthropic' | 'halo' | 'codex' | 'cursor', boolean>>): EngineAvailability[] {
+  return (['anthropic', 'halo', 'codex', 'cursor'] as const).map(engineId => ({
     engineId,
     available: overrides[engineId] ?? false,
     version: overrides[engineId] ? '1.0.0' : '',
@@ -44,6 +45,11 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: () => undefined,
 }))
 
+vi.mock('@cursor/sdk', () => ({
+  Agent: { create: cursorCreate, resume: vi.fn() },
+  Cursor: { models: { list: vi.fn(async () => [{ id: 'auto', displayName: 'Auto' }]) } },
+}))
+
 async function initFresh() {
   vi.resetModules()
   const sdk = await import('../../../../src/main/services/agent/resolved-sdk')
@@ -55,6 +61,7 @@ describe('startup engine resolution', () => {
   beforeEach(() => {
     configuredEngine = 'anthropic'
     availability = engines({ anthropic: true })
+    cursorCreate.mockReset()
   })
 
   afterEach(() => {
@@ -74,6 +81,7 @@ describe('startup engine resolution', () => {
 
     expect(probedEngines).toBeDefined()
     expect(probedEngines).not.toContain('dsh')
+    expect(probedEngines).not.toContain('cursor')
   })
 
   it('probes the opt-in engine when the config selects it', async () => {
@@ -82,6 +90,35 @@ describe('startup engine resolution', () => {
     await initFresh()
 
     expect(probedEngines?.[0]).toBe('dsh')
+  })
+
+  it('probes Cursor first when selected without adding it to fallback engines', async () => {
+    configuredEngine = 'cursor'
+
+    await initFresh()
+
+    expect(probedEngines?.[0]).toBe('cursor')
+    expect(probedEngines?.filter(engine => engine === 'cursor')).toHaveLength(1)
+  })
+
+  it('loads the direct Cursor TypeScript SDK when Cursor is available', async () => {
+    configuredEngine = 'cursor'
+    availability = engines({ cursor: true })
+    cursorCreate.mockResolvedValue({
+      agentId: 'cursor-agent',
+      send: vi.fn(),
+      close: vi.fn(),
+      [Symbol.asyncDispose]: vi.fn(async () => {}),
+    })
+    process.env.CURSOR_API_KEY = 'cursor-test-key'
+
+    const sdk = await initFresh()
+    const session = await sdk.createSession({ cwd: '/workspace' })
+
+    expect(sdk.getActiveEngine()).toBe('cursor')
+    expect(cursorCreate).toHaveBeenCalledOnce()
+    await session.close()
+    delete process.env.CURSOR_API_KEY
   })
 
   it('degrades to an available engine when the configured one did not ship', async () => {

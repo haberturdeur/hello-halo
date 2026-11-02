@@ -14,6 +14,7 @@ import path from 'path'
 
 const ANTHROPIC_PACKAGE = '@anthropic-ai/claude-agent-sdk'
 const HALO_PACKAGE = '@hello-halo/agent-sdk'
+const CURSOR_PACKAGE = '@cursor/sdk'
 
 function appNodeModules(): string {
   return path.join(globalThis.__HALO_TEST_DIR__, 'app', 'node_modules')
@@ -150,5 +151,42 @@ describe('engine availability', () => {
 
     expect(after).toEqual(before)
     expect(after.find(e => e.engineId === 'halo')!.available).toBe(false)
+  })
+
+  it('reports Cursor unavailable when the TypeScript SDK package is absent', async () => {
+    const { probeCursor } = await loadProbe()
+    const result = await probeCursor({})
+
+    expect(result).toMatchObject({ available: false, version: '', fingerprint: '' })
+    expect(result.reason).toContain('@cursor/sdk')
+  })
+
+  it('reports the package available without probing credentials', async () => {
+    const { probeCursor } = await loadProbe()
+    writePackage(
+      CURSOR_PACKAGE,
+      { name: CURSOR_PACKAGE, version: '1.2.0', exports: { '.': './dist/index.js' } },
+      { 'dist/index.js': 'export const Agent = {}' },
+    )
+
+    const result = await probeCursor({ CURSOR_API_KEY: '   ' })
+
+    expect(result.available).toBe(true)
+    expect(result.version).toBe('1.2.0')
+  })
+
+  it('reports the installed TypeScript SDK version and fingerprint', async () => {
+    const { probeCursor } = await loadProbe()
+    writePackage(
+      CURSOR_PACKAGE,
+      { name: CURSOR_PACKAGE, version: '1.2.0', exports: { '.': './dist/index.js' } },
+      { 'dist/index.js': 'export const Agent = {}' },
+    )
+
+    const result = await probeCursor({ CURSOR_API_KEY: 'cursor-key-must-not-appear' })
+
+    expect(result.available).toBe(true)
+    expect(result.version).toBe('1.2.0')
+    expect(result.fingerprint).toMatch(/^[0-9a-f]{12}$/)
   })
 })

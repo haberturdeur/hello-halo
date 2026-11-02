@@ -32,7 +32,7 @@ const TEST_PROVIDER = process.env.HALO_TEST_PROVIDER || ''
 const TEST_OAUTH_SOURCE = process.env.HALO_TEST_OAUTH_SOURCE || ''
 const TEST_SDK_ENGINE = process.env.HALO_TEST_SDK_ENGINE || ''
 
-if (TEST_SDK_ENGINE && !['anthropic', 'halo', 'codex', 'dsh'].includes(TEST_SDK_ENGINE)) {
+if (TEST_SDK_ENGINE && !['anthropic', 'halo', 'codex', 'dsh', 'cursor'].includes(TEST_SDK_ENGINE)) {
   throw new Error('HALO_TEST_SDK_ENGINE must name a supported SDK engine')
 }
 

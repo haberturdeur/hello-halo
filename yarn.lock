@@ -225,6 +225,11 @@
     "@babel/helper-string-parser" "^7.29.11"
     "@babel/helper-validator-identifier" "^7.29.7"
 
+"@bufbuild/protobuf@1.10.0":
+  version "1.10.0"
+  resolved "https://registry.npmjs.org/@bufbuild/protobuf/-/protobuf-1.10.0.tgz"
+  integrity sha512-QDdVFLoN93Zjg36NoQPZfsVH9tZew7wKDKyV5qRdj8ntT4wQCOradQjRaTdwMhWUYsgKsvCINKKm87FdEk96Ag==
+
 "@capacitor/android@^8.6.0":
   version "8.6.0"
   resolved "https://registry.npmjs.org/@capacitor/android/-/android-8.6.0.tgz"
@@ -551,6 +556,37 @@
     crelt "^1.0.6"
     style-mod "^4.1.0"
     w3c-keyname "^2.2.4"
+
+"@connectrpc/connect-web@^1.6.1":
+  version "1.7.0"
+  resolved "https://registry.npmjs.org/@connectrpc/connect-web/-/connect-web-1.7.0.tgz"
+  integrity sha512-qyP0YOnUPRWwCc/VfsoydMJvkb7EyUPr2q9sHgBuJzbADjiqck1gKH5V5ZPzPhTLBvmz5UvG+wiZ5sMRQHU1MQ==
+
+"@connectrpc/connect@^1.6.1":
+  version "1.7.0"
+  resolved "https://registry.npmjs.org/@connectrpc/connect/-/connect-1.7.0.tgz"
+  integrity sha512-iNKdJRi69YP3mq6AePRT8F/HrxWCewrhxnLMNm0vpqXAR8biwzRtO6Hjx80C6UvtKJ5sFmffQT7I4Baecz389w==
+
+"@cursor/sdk-linux-x64@1.2.0":
+  version "1.2.0"
+  resolved "https://registry.npmjs.org/@cursor/sdk-linux-x64/-/sdk-linux-x64-1.2.0.tgz"
+  integrity sha512-ainsGAFtkWTBZrLABp82Hvfv7VB/FxmZHE42qMVotFTRDwOY2iduvhSig910bVxv+kw3S00Srmu/9CxklLwhbw==
+
+"@cursor/sdk@^1.2.0":
+  version "1.2.0"
+  resolved "https://registry.npmjs.org/@cursor/sdk/-/sdk-1.2.0.tgz"
+  integrity sha512-Nqm2U0zTWrYEDCv3Rdwsfa1gYZWsg+JnY+I2F8BwWSAr3FNo0TZWwyHWoWngZgriF1w02fJ4gjJWaul9zysvgQ==
+  dependencies:
+    "@bufbuild/protobuf" "1.10.0"
+    "@connectrpc/connect" "^1.6.1"
+    "@connectrpc/connect-web" "^1.6.1"
+    "@statsig/js-client" "3.31.0"
+  optionalDependencies:
+    "@cursor/sdk-darwin-arm64" "1.2.0"
+    "@cursor/sdk-darwin-x64" "1.2.0"
+    "@cursor/sdk-linux-arm64" "1.2.0"
+    "@cursor/sdk-linux-x64" "1.2.0"
+    "@cursor/sdk-win32-x64" "1.2.0"
 
 "@dagrejs/dagre@^3.0.0":
   version "3.1.0"
@@ -1403,6 +1439,18 @@
   version "4.6.0"
   resolved "https://registry.npmjs.org/@sindresorhus/is/-/is-4.6.0.tgz"
   integrity sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==
+
+"@statsig/client-core@3.31.0":
+  version "3.31.0"
+  resolved "https://registry.npmjs.org/@statsig/client-core/-/client-core-3.31.0.tgz"
+  integrity sha512-SuxQD6TmVszPG7FoMKwTk/uyBuVFk7XnxI3T/E0uyb7PL7GNjONtfsoh+NqBBVUJVse0CUeSFfgJPoZy1ZOslQ==
+
+"@statsig/js-client@3.31.0":
+  version "3.31.0"
+  resolved "https://registry.npmjs.org/@statsig/js-client/-/js-client-3.31.0.tgz"
+  integrity sha512-LFa5E0LjT6sTfZv3sNGoyRLSZ1078+agdgOA+Vm1ecjG+KbSOfBLTW7hMwimrJ29slRwbYDzbtKaPJo/R37N2g==
+  dependencies:
+    "@statsig/client-core" "3.31.0"
 
 "@szmarczak/http-timer@^4.0.5":
   version "4.0.6"
@@ -8406,7 +8454,7 @@ zod-to-json-schema@^3.25.1:
   resolved "https://registry.npmjs.org/zod-to-json-schema/-/zod-to-json-schema-3.25.2.tgz"
   integrity sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==
 
-zod@^3.24.1, "zod@^3.25 || ^4.0":
+"zod@^3.25 || ^4.0", zod@^3.25.76:
   version "3.25.76"
   resolved "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz"
   integrity sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==

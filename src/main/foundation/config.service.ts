@@ -740,8 +740,10 @@ interface HaloConfig {
     promptProfile?: 'official' | 'halo'
     configDirMode?: 'halo' | 'cc' | 'custom'
     customConfigDir?: string
-    /** Experimental: switch agent engine. 'anthropic' = Claude Code SDK (default), 'halo' = Halo SDK, 'codex' = Codex SDK adapter, 'dsh' = DeepSeek Harness adapter. */
-    sdkEngine?: 'anthropic' | 'halo' | 'codex' | 'dsh'
+    /** Experimental: switch agent engine. Cursor uses the optional @cursor/sdk local runtime. */
+    sdkEngine?: 'anthropic' | 'halo' | 'codex' | 'dsh' | 'cursor'
+    /** Global model selected from an engine-owned catalog. */
+    engineModel?: string
     /** Enable Digital Humans MCP tools (automation app management) */
     enableDigitalHumans?: boolean
     /** Master switch for Cross-Conversation Interop (conversation_read/conversation_send). Undefined/true = on. */

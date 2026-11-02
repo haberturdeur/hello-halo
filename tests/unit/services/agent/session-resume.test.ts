@@ -121,7 +121,7 @@ it('starts fresh when no transcript exists', async () => {
   expect(createSession.mock.calls[0][0]).not.toHaveProperty('resume')
 })
 
-it.each(['codex', 'dsh'])('leaves %s resumption to its adapter', async engine => {
+it.each(['codex', 'dsh', 'cursor'])('leaves %s resumption to its adapter', async engine => {
   getActiveEngine.mockReturnValue(engine)
   const { configDir, sessionId, resume } = fixture()
   await resume(configDir)

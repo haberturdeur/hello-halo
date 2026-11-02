@@ -255,6 +255,25 @@ describe('independent account session lifecycle', () => {
     await flush()
   })
 
+  it('uses an engine-provided generation to reuse and rebuild engine-owned sessions', async () => {
+    const first = fakeSession('cursor-auto')
+    const replacement = fakeSession('cursor-composer')
+    createSession.mockResolvedValueOnce(first).mockResolvedValueOnce(replacement)
+    const options = (generation: string) => ({
+      model: 'auto',
+      systemPrompt: 'same prompt',
+      env: { HALO_AI_SOURCE_ID: 'engine:cursor' },
+      credentialsGeneration: generation,
+    })
+
+    await expect(getOrCreateV2Session('space', 'conv-cursor', options('cursor:auto'))).resolves.toBe(first)
+    await expect(getOrCreateV2Session('space', 'conv-cursor', options('cursor:auto'))).resolves.toBe(first)
+    expect(first.close).not.toHaveBeenCalled()
+
+    await expect(getOrCreateV2Session('space', 'conv-cursor', options('cursor:composer-2.5'))).resolves.toBe(replacement)
+    expect(first.close).toHaveBeenCalledTimes(1)
+  })
+
   it.each(['reconfigure', 'logout'])('%s invalidates only the affected account session', async (change) => {
     const first = fakeSession('account-a')
     const second = fakeSession('account-b')
